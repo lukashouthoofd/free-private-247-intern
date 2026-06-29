@@ -1,0 +1,9 @@
+[Unit]
+Description=daily deterministic pipeline (no LLM) - digest pattern
+After=network-online.target
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+WorkingDirectory=/home/hermes
+ExecStart=/home/hermes/.hermes/tools-venv/bin/python /home/hermes/.hermes/bin/pipeline.py daily

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Daily cap on headless `claude -p` runs -> protects the metered coding-agent pool from draining.
+# A Claude-specific instance of the generic "metered-CLI daily cap" pattern; swap `claude` for any metered CLI.
+set -euo pipefail
+CAP="${CLAUDE_DAYCAP:-20}"
+STATE="$HOME/.hermes/data/.claude-daycap"
+today="$(date +%Y-%m-%d)"
+read -r d n < "$STATE" 2>/dev/null || { d=""; n=0; }
+[[ "$n" =~ ^[0-9]+$ ]] || n=0          # auto-recover from a corrupt counter (stay fail-closed)
+[ "$d" = "$today" ] || n=0
+if [ "$n" -ge "$CAP" ]; then
+  echo "claude-capped: daily limit reached ($n/$CAP today) - refused. Try tomorrow or use a cheaper model." >&2
+  exit 9
+fi
+printf '%s %s\n' "$today" "$((n+1))" > "$STATE"
+exec claude -p "$@"

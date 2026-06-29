@@ -1,0 +1,30 @@
+# === SECRETS — NEVER commit ===
+.env
+*.env
+!.env.example
+secrets/
+*.key
+*.pem
+*token*
+*credential*
+
+# === DATA (user/business data, stays local) ===
+*.db
+*.db-wal
+*.db-shm
+data/
+export/
+notes/
+
+# === RUNTIME / STATE ===
+logs/
+sessions/
+cron/
+.claude-daycap
+__pycache__/
+*.pyc
+*.pyo
+
+# === OS ===
+.DS_Store
+Thumbs.db

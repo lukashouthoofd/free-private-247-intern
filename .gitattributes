@@ -1,0 +1,9 @@
+# This project is deployed on Linux. Force LF on every checkout so shell-script
+# shebangs and Python never break with CRLF, even when edited on Windows.
+* text=auto eol=lf
+
+# Binary assets (never normalize)
+*.pdf binary
+*.png binary
+*.jpg binary
+*.woff2 binary

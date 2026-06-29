@@ -1,0 +1,7 @@
+[Unit]
+Description=daily deterministic pipeline (digest pattern) - every morning 05:45
+[Timer]
+OnCalendar=*-*-* 05:45:00
+Persistent=true
+[Install]
+WantedBy=timers.target

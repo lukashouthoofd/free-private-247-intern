@@ -1,0 +1,7 @@
+[Unit]
+Description=Hermes weekly CRM nurture-sweep
+[Service]
+Type=oneshot
+User=hermes
+WorkingDirectory=/home/hermes
+ExecStart=/home/hermes/.hermes/tools-venv/bin/python /home/hermes/.hermes/bin/pipeline.py weekly
