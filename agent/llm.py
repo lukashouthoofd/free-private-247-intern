@@ -174,7 +174,13 @@ def complete(cfg: LLMConfig, messages: list[dict], tools: list | None = None) ->
     fn = _DISPATCH.get(cfg.provider)
     if not fn:
         raise LLMError(f"unknown provider '{cfg.provider}' (use: openai/anthropic/claude-code, or an alias)")
-    return fn(cfg, messages, tools)
+    result = fn(cfg, messages, tools)
+    try:
+        from . import usage
+        usage.record(cfg.provider, cfg.model, result.get("usage"))
+    except Exception:
+        pass  # metering must never break a real call
+    return result
 
 
 def complete_with_fallback(cfgs: list[LLMConfig], messages: list[dict], tools: list | None = None) -> dict:

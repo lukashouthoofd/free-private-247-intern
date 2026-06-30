@@ -1,0 +1,24 @@
+# Self-hosted AI employee — weekly reflection (one-shot, fired by the .timer).
+# Re-reads recent memory and distils AT MOST 3 durable lessons (fail-closed: no signal => no lesson).
+# EDIT the two paths/user below to match ai-employee.service, then:
+#   sudo cp systemd/ai-employee-reflect.service systemd/ai-employee-reflect.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now ai-employee-reflect.timer
+#   systemctl list-timers ai-employee-reflect.timer       # check next run
+#   journalctl -u ai-employee-reflect -f                  # watch a run
+[Unit]
+Description=Self-hosted AI employee — weekly reflection
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=youruser
+WorkingDirectory=/home/youruser/ai-employee
+ExecStart=/home/youruser/ai-employee/.venv/bin/python -m agent reflect
+# treat the agent as untrusted — OS isolation is the real safety net
+MemoryMax=2G
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/youruser/ai-employee

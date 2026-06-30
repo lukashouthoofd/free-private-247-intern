@@ -40,6 +40,7 @@ class Agent:
     max_steps: int = 20
     approver: Callable[[str, dict], bool] = lambda name, args: False   # default: deny ask_first
     logger: Callable[[str], None] = print
+    usage_cfg: dict = field(default_factory=dict)   # full config dict — for the daily spend cap
 
     def __post_init__(self):
         self._tools = {t.name: t for t in self.tools}
@@ -51,6 +52,10 @@ class Agent:
         schemas = [t.schema() for t in self.tools] or None
 
         for step in range(self.max_steps):
+            from .usage import over_cap
+            blocked, reason = over_cap(self.usage_cfg)
+            if blocked:
+                return f"(stopped: {reason} — daily spend cap hit, refusing further API calls)"
             out = complete_with_fallback(self.configs, messages, schemas)
             calls = out.get("tool_calls") or []
             if not calls:

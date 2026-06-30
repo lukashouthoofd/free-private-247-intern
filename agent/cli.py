@@ -11,8 +11,9 @@ from .tools import DEFAULT_TOOLS
 from .tools_web import WEB_TOOLS
 from .memory import MEMORY_TOOLS
 from .tools_email import EMAIL_TOOLS
+from .usage import USAGE_TOOLS
 
-TOOLS = DEFAULT_TOOLS + WEB_TOOLS + MEMORY_TOOLS + EMAIL_TOOLS
+TOOLS = DEFAULT_TOOLS + WEB_TOOLS + MEMORY_TOOLS + EMAIL_TOOLS + USAGE_TOOLS
 
 
 def load_dotenv(path: str = ".env") -> None:
@@ -69,7 +70,7 @@ def _approver(name: str, args: dict) -> bool:
 
 def cmd_chat(cfg: dict) -> None:
     agent = Agent(build_configs(cfg), system_prompt(cfg), TOOLS,
-                  max_steps=int((cfg.get("agent") or {}).get("max_steps", 20)), approver=_approver)
+                  max_steps=int((cfg.get("agent") or {}).get("max_steps", 20)), approver=_approver, usage_cfg=cfg)
     print("agent ready — type a message, Ctrl-C to quit.")
     while True:
         try:
@@ -110,7 +111,7 @@ def cmd_telegram(cfg: dict) -> None:
     max_steps = int((cfg.get("agent") or {}).get("max_steps", 20))
 
     def factory(approver):
-        return Agent(configs, system, TOOLS, max_steps=max_steps, approver=approver)
+        return Agent(configs, system, TOOLS, max_steps=max_steps, approver=approver, usage_cfg=cfg)
 
     TelegramGateway(token, tg.get("allowed_users", []), factory).run()
 
@@ -125,6 +126,7 @@ def main(argv=None) -> None:
     load_dotenv()
     cfg = load_config()
     os.environ.setdefault("MEMORY_DIR", str((cfg.get("memory") or {}).get("dir", "./data/memory")))
+    os.environ.setdefault("USAGE_DIR", str((cfg.get("usage") or {}).get("dir", "./data")))
     cmd = argv[0] if argv else "selftest"
     if cmd == "chat":
         cmd_chat(cfg)
@@ -135,8 +137,16 @@ def main(argv=None) -> None:
     elif cmd == "digest":
         from .digest import deliver
         deliver(cfg)
+    elif cmd == "reflect":
+        from .reflect import reflect
+        reflect(cfg)
+    elif cmd == "usage":
+        from . import usage as _u
+        print(f"today: {_u.today_calls()} call(s), ${_u.today_spend_usd():.4f} spent")
+        over, reason = _u.over_cap(cfg)
+        print("CAP HIT: " + reason if over else "under cap")
     elif cmd == "setup":
         from .setup import run as setup_run
         setup_run()
     else:
-        print("usage: python -m agent [setup|selftest|chat|telegram|digest]")
+        print("usage: python -m agent [setup|selftest|chat|telegram|digest|reflect|usage]")

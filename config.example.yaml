@@ -28,6 +28,8 @@ agent:
   operator: "set-me"           # who it works for (fill identity/USER.md too)
   max_steps: 20                # hard tool-loop cap — anti-runaway, do not remove
   reasoning_effort: medium     # low | medium | high (passed through where supported)
+  daily_call_cap: 0            # max model calls/day (0 = unlimited) — the runaway / spend guard
+  daily_usd_cap: 0             # max $/day, if your provider reports cost (0 = unlimited)
 
 channels:
   cli: true                    # always-on local REPL (`agent chat`)
