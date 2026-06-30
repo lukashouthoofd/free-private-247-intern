@@ -13,6 +13,20 @@ from .tools_web import WEB_TOOLS
 TOOLS = DEFAULT_TOOLS + WEB_TOOLS
 
 
+def load_dotenv(path: str = ".env") -> None:
+    """Load KEY=VALUE lines from .env into the environment (does not override existing vars).
+    Tiny stdlib parser — so `python -m agent ...` just works after `agent setup`, no exporting."""
+    p = Path(path)
+    if not p.exists():
+        return
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
 def load_config(path: str = "config.yaml") -> dict:
     p = Path(path)
     if not p.exists():
@@ -101,6 +115,7 @@ def cmd_telegram(cfg: dict) -> None:
 
 def main(argv=None) -> None:
     argv = argv if argv is not None else sys.argv[1:]
+    load_dotenv()
     cfg = load_config()
     cmd = argv[0] if argv else "selftest"
     if cmd == "chat":
