@@ -1,16 +1,49 @@
 #!/usr/bin/env bash
 # Daily cap on headless `claude -p` runs -> protects the metered coding-agent pool from draining.
 # A Claude-specific instance of the generic "metered-CLI daily cap" pattern; swap `claude` for any metered CLI.
+#
+# Two-tier ceiling: a conservative DAY cap (you're usually chatting live -> keep spend predictable) and a
+# much larger NIGHT cap (let it grind hard while you sleep). Night window = [NIGHT_START, NIGHT_END) and may
+# wrap midnight. Model + reasoning effort are pinned here so every delegate is consistent; a caller can still
+# override by passing its own --model / --effort. Set DELEGATE_EFFORT="" to drop --effort entirely (older
+# Claude Code builds without the flag). Every knob is env-overridable (e.g. from the systemd unit).
+# NB: knobs are namespaced DELEGATE_* on purpose — Claude Code reserves CLAUDE_*/ANTHROPIC_* (e.g. it
+# exports CLAUDE_EFFORT), so naming them CLAUDE_* would let the host session silently override our defaults.
 set -euo pipefail
-CAP="${CLAUDE_DAYCAP:-20}"
+
+NIGHT_START="${DELEGATE_NIGHT_START:-23}"      # night begins at 23:00
+NIGHT_END="${DELEGATE_NIGHT_END:-8}"           # night ends at 08:00 (exclusive)
+DAYCAP="${DELEGATE_DAYCAP:-50}"                # runs allowed during the day
+NIGHTCAP="${DELEGATE_NIGHTCAP:-300}"           # runs allowed at night (go hard)
+MODEL="${DELEGATE_MODEL:-claude-opus-4-8}"     # delegate model (swap to claude-sonnet-4-6 if no Opus access)
+EFFORT="${DELEGATE_EFFORT:-low}"               # DAY reasoning effort: low|medium|high|xhigh|max (low = lean while you may be using Claude live)
+
+hour=$((10#$(date +%H)))                        # 10# forces base-10 so 08/09 aren't parsed as bad octal
+if [ "$NIGHT_START" -gt "$NIGHT_END" ]; then
+  if [ "$hour" -ge "$NIGHT_START" ] || [ "$hour" -lt "$NIGHT_END" ]; then night=1; else night=0; fi
+else
+  if [ "$hour" -ge "$NIGHT_START" ] && [ "$hour" -lt "$NIGHT_END" ]; then night=1; else night=0; fi
+fi
+# At night you're not competing with your own interactive Claude, so unleash: bigger cap AND heavier
+# per-run thinking (high). Dial with DELEGATE_EFFORT_NIGHT (xhigh/max push the Max pool harder still).
+if [ "$night" = 1 ]; then CAP="$NIGHTCAP"; EFFORT="${DELEGATE_EFFORT_NIGHT:-high}"; else CAP="$DAYCAP"; fi
+
 STATE="$HOME/.hermes/data/.claude-daycap"
+mkdir -p "${STATE%/*}" 2>/dev/null || true      # ensure the state dir exists (cheap insurance)
 today="$(date +%Y-%m-%d)"
 read -r d n < "$STATE" 2>/dev/null || { d=""; n=0; }
-[[ "$n" =~ ^[0-9]+$ ]] || n=0          # auto-recover from a corrupt counter (stay fail-closed)
+[[ "$n" =~ ^[0-9]+$ ]] || n=0                   # auto-recover from a corrupt counter (stay fail-closed)
 [ "$d" = "$today" ] || n=0
 if [ "$n" -ge "$CAP" ]; then
-  echo "claude-capped: daily limit reached ($n/$CAP today) - refused. Try tomorrow or use a cheaper model." >&2
+  win=$([ "$night" = 1 ] && echo night || echo day)
+  echo "claude-capped: daily limit reached ($n/$CAP today, $win) - refused. Try later or use a cheaper model." >&2
   exit 9
 fi
 printf '%s %s\n' "$today" "$((n+1))" > "$STATE"
-exec claude -p "$@"
+
+extra=()
+case " $* " in *" --model "*) :;; *) extra+=(--model "$MODEL");; esac
+if [ -n "$EFFORT" ]; then
+  case " $* " in *" --effort "*) :;; *) extra+=(--effort "$EFFORT");; esac
+fi
+exec claude -p "${extra[@]}" "$@"
