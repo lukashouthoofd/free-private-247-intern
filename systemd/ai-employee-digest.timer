@@ -2,7 +2,7 @@
 # Enable with:  sudo systemctl enable --now ai-employee-digest.timer
 # (matches schedule.digest_hour in config.yaml — keep the two in sync if you change the hour.)
 [Unit]
-Description=Self-hosted AI employee — daily digest timer
+Description=Your free, private, 24/7 intern — daily digest timer
 
 [Timer]
 OnCalendar=*-*-* 06:00:00

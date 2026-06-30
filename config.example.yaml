@@ -1,5 +1,5 @@
 # ============================================================================
-#  Self-hosted AI employee — configuration
+#  Your free, private, 24/7 intern — configuration
 #  Copy to  config.yaml  and edit. API KEYS GO IN .env, NEVER HERE.
 # ============================================================================
 
@@ -24,7 +24,7 @@ fallback:
   - { provider: ollama, model: qwen2.5:3b }   # local, no rate limit (needs Ollama installed)
 
 agent:
-  name: "Aria"                 # your agent's name
+  name: "Intern"               # your agent's name
   operator: "set-me"           # who it works for (fill identity/USER.md too)
   max_steps: 20                # hard tool-loop cap — anti-runaway, do not remove
   reasoning_effort: medium     # low | medium | high (passed through where supported)
@@ -42,6 +42,8 @@ gates:
   autonomous: [read, research, measure, draft]
   ask_first:  [send, submit, post, publish, signup, pay]
   never:      [create_account, enter_credentials, solve_captcha, accept_terms]
+  # Note: these lists are declarative — they inform the behavior contract in identity/SOUL.md.
+  # Tool-level enforcement is the per-tool `gate` set in code; editing these lists does not re-wire it.
 
 memory:
   dir: ./data/memory

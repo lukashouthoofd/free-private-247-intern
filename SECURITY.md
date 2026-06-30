@@ -47,6 +47,11 @@ caps the blast radius is the gate model: even a fully hijacked model cannot send
 publish without your approval (`ask_first`), and cannot do anything on the never-list at all
 (`never`). Treat the gates — not the prompt — as the real boundary.
 
+One exception worth knowing: with `provider: claude-code`, the agent hands the task to the
+`claude -p` CLI, which runs its own tools under Claude Code's own permission prompts. This
+runtime's `ask_first` / `never` gates are **not** consulted for that provider — manage safety
+through Claude Code's permission settings if you use it.
+
 ## 3. Model reality
 
 - A **cloud model is the reliable daily driver.** Free Google Gemini is the default and handles

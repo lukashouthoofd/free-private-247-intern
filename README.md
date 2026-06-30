@@ -1,9 +1,11 @@
-# Self-hosted AI employee
+# Your free, private, 24/7 intern
 
-Turn an **old computer into a 24/7 AI employee** you fully own. Clone this repo onto a spare
-Debian/Ubuntu machine, run the installer, answer a few setup questions, and you have a small
-agent that runs around the clock, talks to you over chat, uses real tools to do real work —
-and **never makes an outward move without your say-so**.
+![tests](https://github.com/lukashouthoofd/free-private-247-intern/actions/workflows/tests.yml/badge.svg)
+
+Turn an **old laptop into a free AI intern** you fully own — self-hosted, private, always on.
+Clone this repo onto a spare Debian/Ubuntu machine, run the installer, answer a few questions, and
+you have an agent that works around the clock, talks to you over chat, uses real tools to do real
+work — and **never makes an outward move without your say-so**.
 
 It's **model-agnostic**: pick your brain in one config line — free Google **Gemini**, your
 **Claude** subscription (`claude -p`), **OpenAI**, **Groq**, **OpenRouter**, **Mistral**, or a
@@ -88,8 +90,9 @@ Read [`SECURITY.md`](SECURITY.md) before putting this on an always-on box. The s
 - **Model reality.** A cloud model (free Gemini) is the reliable daily driver. Small local
   Ollama models are a privacy/offline **fallback** — they fumble long tool chains.
 - **Keys + spend cap.** Keys live in `.env` (`chmod 600`), never in git. Set a spend cap in your
-  provider's console **and** the built-in `agent.daily_call_cap` / `agent.daily_usd_cap`. Verify
-  a provider with `python -m agent selftest`.
+  provider's console **and** the built-in `agent.daily_call_cap` / `agent.daily_usd_cap`. The
+  `daily_call_cap` is the real runaway guard for token-only providers (e.g. Gemini) that don't
+  report a per-call cost. Verify a provider with `python -m agent selftest`.
 - **The never-list:** create account, enter credentials/OTP, solve CAPTCHA, accept terms —
   refused (no tool ships for them + the behavior contract refuses). Outward actions it *can* do
   (send, post) are `ask_first` — approved, not auto-refused. Details in [`SECURITY.md`](SECURITY.md).

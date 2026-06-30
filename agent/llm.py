@@ -121,9 +121,24 @@ def _complete_anthropic(cfg: LLMConfig, messages: list[dict], tools: list | None
     if not cfg.api_key:
         raise LLMError(f"no API key in ${cfg.api_key_env} for anthropic/{cfg.model}")
     system = "\n\n".join(m["content"] for m in messages if m.get("role") == "system")
-    conv = [{"role": ("assistant" if m["role"] == "assistant" else "user"),
-             "content": m.get("content", "")}
-            for m in messages if m.get("role") in ("user", "assistant")]
+    # Build a valid Anthropic conversation: keep tool results (as user text — don't drop them),
+    # skip empty assistant tool-call turns (Anthropic rejects empty content), and merge
+    # consecutive same-role messages so the alternation rule holds.
+    conv: list[dict] = []
+    for m in messages:
+        role = m.get("role")
+        if role in ("system", None):
+            continue
+        content = (f"[tool result] {m.get('content', '')}" if role == "tool" else (m.get("content") or "")).strip()
+        if not content:
+            continue
+        r = "assistant" if role == "assistant" else "user"
+        if conv and conv[-1]["role"] == r:
+            conv[-1]["content"] += "\n\n" + content
+        else:
+            conv.append({"role": r, "content": content})
+    if not conv:
+        conv = [{"role": "user", "content": "(continue)"}]
     payload: dict[str, Any] = {"model": cfg.model, "max_tokens": cfg.max_tokens,
                                "temperature": cfg.temperature, "messages": conv}
     if system:

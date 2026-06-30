@@ -73,7 +73,7 @@ def _owns(html: str, name: str, town: str, strict: bool) -> bool:
         return False
     name_in_body = sum(t in body for t in toks)
     name_in_title = any(t in title for t in toks)
-    t = re.sub(r"[^a-z0-9]", "", _strip(town).split()[0]) if town else ""
+    t = re.sub(r"[^a-z0-9]", "", _strip(town)) if town else ""   # whole town (handles "De Pinte" etc.)
     town_hit = len(t) >= 4 and t in (title + body)
     if strict:
         return (name_in_title or name_in_body >= 1) and town_hit

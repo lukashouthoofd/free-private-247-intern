@@ -1,4 +1,4 @@
-# Dedicated-box setup — fresh Debian → 24/7 AI employee
+# Dedicated-box setup — fresh Debian → 24/7 intern
 
 This is the full walkthrough for turning a spare machine into an always-on agent. Budget ~1–2
 hours. You only need a screen + keyboard for the first 10 minutes; after that it's SSH-only.
@@ -41,7 +41,7 @@ Run the agent under its own user, auto-restarting, surviving reboots. Create
 
 ```ini
 [Unit]
-Description=Self-hosted AI employee
+Description=Your free, private, 24/7 intern
 After=network-online.target
 Wants=network-online.target
 

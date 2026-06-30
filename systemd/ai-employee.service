@@ -1,10 +1,10 @@
-# Self-hosted AI employee — 24/7 service (Telegram gateway).
+# Your free, private, 24/7 intern — 24/7 service (Telegram gateway).
 # EDIT the two paths/user below, then:
 #   sudo cp systemd/ai-employee.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now ai-employee
 #   journalctl -u ai-employee -f
 [Unit]
-Description=Self-hosted AI employee
+Description=Your free, private, 24/7 intern
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=300

@@ -1,4 +1,4 @@
-# Self-hosted AI employee — weekly reflection (one-shot, fired by the .timer).
+# Your free, private, 24/7 intern — weekly reflection (one-shot, fired by the .timer).
 # Re-reads recent memory and distils AT MOST 3 durable lessons (fail-closed: no signal => no lesson).
 # EDIT the two paths/user below to match ai-employee.service, then:
 #   sudo cp systemd/ai-employee-reflect.service systemd/ai-employee-reflect.timer /etc/systemd/system/
@@ -6,7 +6,7 @@
 #   systemctl list-timers ai-employee-reflect.timer       # check next run
 #   journalctl -u ai-employee-reflect -f                  # watch a run
 [Unit]
-Description=Self-hosted AI employee — weekly reflection
+Description=Your free, private, 24/7 intern — weekly reflection
 After=network-online.target
 Wants=network-online.target
 

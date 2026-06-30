@@ -21,6 +21,7 @@ from typing import Callable
 
 API = "https://api.telegram.org/bot{token}/{method}"
 _OK = {"yes", "y", "ok", "oke", "oké", "ja", "do it", "go", "approve"}
+_NO = {"no", "n", "deny", "stop", "cancel", "nee"}
 
 # Inline keyboard shown for every ask_first approval (plain words, no emoji).
 _APPROVE_KB = {"inline_keyboard": [[
@@ -99,8 +100,14 @@ class TelegramGateway:
                     self._api("answerCallbackQuery", callback_query_id=m["callback_id"],
                               text="Approved" if decision else "Denied")
                     return decision
-                # typed-text fallback: "yes"/"no" (and synonyms) still honored
-                return m["text"].strip().lower() in _OK
+                # typed-text fallback: only yes/no count as a vote; any other text (a new task,
+                # a stray message) is ignored so it can't be mistaken for a "deny".
+                t = m["text"].strip().lower()
+                if t in _OK:
+                    return True
+                if t in _NO:
+                    return False
+                continue
             elapsed += 20
         return False
 

@@ -128,7 +128,7 @@ def write_user(root: Path, name: str, role: str, region: str) -> None:
 
 def run() -> None:
     print("=== self-hosted AI employee — setup ===\n")
-    agent_name = _ask("Agent name", "Aria")
+    agent_name = _ask("Agent name", "Intern")
     op_name = _ask("Your name (the operator)")
     op_role = _ask("Your role / business")
     op_region = _ask("Region / timezone")
@@ -151,11 +151,11 @@ def run() -> None:
     write_env(root, key_env, key, tg_token)
     write_user(root, op_name, op_role, op_region)
 
-    print("\n✓ setup done.")
+    print("\nsetup done.")
     if provider == "claude-code":
-        print("  provider=claude-code → run `claude setup-token` once so the box can use your subscription.")
+        print("  provider=claude-code -> run `claude setup-token` once so the box can use your subscription.")
     elif provider == "ollama":
-        print("  provider=ollama → make sure Ollama is running and the model is pulled (`ollama pull " + (model or "qwen2.5:3b") + "`).")
+        print("  provider=ollama -> make sure Ollama is running and the model is pulled (`ollama pull " + (model or "qwen2.5:3b") + "`).")
     elif key_env and not key:
         print(f"  ! put your key in .env as {key_env}=...")
     print("  then: python -m agent selftest   (and)   python -m agent chat")

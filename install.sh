@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  Self-hosted AI employee — installer for a DEDICATED Debian/Ubuntu machine.
+#  Your free, private, 24/7 intern — installer for a DEDICATED Debian/Ubuntu machine.
 #  This box BECOMES the agent (an old laptop / mini-PC / old desktop or gaming
 #  PC) — NOT your daily driver. Terminal only, no GUI needed.
 #

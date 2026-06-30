@@ -1,7 +1,7 @@
 # Fires ai-employee-reflect.service weekly, Sunday ~22:00 local time.
 # Enable with:  sudo systemctl enable --now ai-employee-reflect.timer
 [Unit]
-Description=Self-hosted AI employee — weekly reflection timer
+Description=Your free, private, 24/7 intern — weekly reflection timer
 
 [Timer]
 OnCalendar=Sun *-*-* 22:00:00

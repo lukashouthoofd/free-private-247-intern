@@ -26,8 +26,15 @@ def load_dotenv(path: str = ".env") -> None:
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
+        if line.startswith("export "):          # tolerate `export KEY=value`
+            line = line[7:]
         k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        v = v.strip()
+        if len(v) >= 2 and v[0] in "\"'" and v[-1] == v[0]:
+            v = v[1:-1]                          # quoted value -> keep verbatim
+        else:
+            v = v.split(" #", 1)[0].strip()      # drop a trailing inline comment
+        os.environ.setdefault(k.strip(), v)
 
 
 def load_config(path: str = "config.yaml") -> dict:

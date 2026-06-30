@@ -1,11 +1,11 @@
-# Self-hosted AI employee — daily morning brief (one-shot, fired by the .timer).
+# Your free, private, 24/7 intern — daily morning brief (one-shot, fired by the .timer).
 # EDIT the two paths/user below to match ai-employee.service, then:
 #   sudo cp systemd/ai-employee-digest.service systemd/ai-employee-digest.timer /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now ai-employee-digest.timer
 #   systemctl list-timers ai-employee-digest.timer        # check next run
 #   journalctl -u ai-employee-digest -f                   # watch a run
 [Unit]
-Description=Self-hosted AI employee — daily digest
+Description=Your free, private, 24/7 intern — daily digest
 After=network-online.target
 Wants=network-online.target
 
