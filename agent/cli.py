@@ -87,5 +87,8 @@ def main(argv=None) -> None:
         cmd_chat(cfg)
     elif cmd == "selftest":
         cmd_selftest(cfg)
+    elif cmd == "setup":
+        from .setup import run as setup_run
+        setup_run()
     else:
-        print("usage: python -m agent [chat|selftest]")
+        print("usage: python -m agent [setup|selftest|chat]")
