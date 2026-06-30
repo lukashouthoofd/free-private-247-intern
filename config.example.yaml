@@ -1,0 +1,51 @@
+# ============================================================================
+#  Self-hosted AI employee — configuration
+#  Copy to  config.yaml  and edit. API KEYS GO IN .env, NEVER HERE.
+# ============================================================================
+
+model:
+  # provider: pick your brain. One of:
+  #   gemini | openai | groq | openrouter | mistral | ollama | anthropic | claude-code
+  #   - gemini      : free tier, great default (key: GEMINI_API_KEY)
+  #   - ollama      : fully local, free, offline (no key) — needs a model pulled
+  #   - claude-code : uses your Claude Code / Max *subscription* (no API key) via `claude -p`
+  #   - openai/groq/openrouter/mistral : any OpenAI-compatible API (their key)
+  provider: gemini
+  model: gemini-2.5-flash
+  # base_url / api_key_env are auto-set per provider. Override only for a custom endpoint:
+  # base_url: https://your-endpoint/v1
+  # api_key_env: MY_CUSTOM_KEY
+  max_tokens: 2048
+  temperature: 0.3
+
+# Keep the agent ALIVE when the primary's quota runs out — tried top to bottom.
+fallback:
+  - { provider: groq,   model: llama-3.3-70b-versatile }
+  - { provider: ollama, model: qwen2.5:3b }   # local, no rate limit (needs Ollama installed)
+
+agent:
+  name: "Aria"                 # your agent's name
+  operator: "set-me"           # who it works for (fill identity/USER.md too)
+  max_steps: 20                # hard tool-loop cap — anti-runaway, do not remove
+  reasoning_effort: medium     # low | medium | high (passed through where supported)
+
+channels:
+  cli: true                    # always-on local REPL (`agent chat`)
+  telegram:
+    enabled: false             # token in .env (TELEGRAM_BOT_TOKEN)
+    allowed_users: []          # numeric chat IDs allowed to talk to it (empty = nobody)
+
+# Human-in-the-loop. The agent does GREEN freely, ASKS before anything outward, NEVER does RED.
+gates:
+  autonomous: [read, research, measure, draft]
+  ask_first:  [send, submit, post, publish, signup, pay]
+  never:      [create_account, enter_credentials, solve_captcha, accept_terms]
+
+memory:
+  dir: ./data/memory
+  enabled: true
+
+# The "digest" + "reflection" patterns (wired by the systemd timers in systemd/).
+schedule:
+  digest_hour: 6               # pre-compute a daily brief before you wake up
+  reflection_weekday: sun      # weekly fail-closed self-reflection
