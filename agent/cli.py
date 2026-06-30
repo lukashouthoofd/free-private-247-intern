@@ -1,6 +1,7 @@
 """Command-line entry: `python -m agent [chat|selftest]`."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -79,6 +80,22 @@ def cmd_selftest(cfg: dict) -> None:
         print(f"no key in ${primary.api_key_env} -> set one in .env for a live call (or use provider: ollama / claude-code).")
 
 
+def cmd_telegram(cfg: dict) -> None:
+    from .telegram import TelegramGateway
+    tg = (cfg.get("channels") or {}).get("telegram") or {}
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        print("set TELEGRAM_BOT_TOKEN in .env, and channels.telegram.allowed_users in config.yaml")
+        return
+    configs, system = build_configs(cfg), system_prompt(cfg)
+    max_steps = int((cfg.get("agent") or {}).get("max_steps", 20))
+
+    def factory(approver):
+        return Agent(configs, system, DEFAULT_TOOLS, max_steps=max_steps, approver=approver)
+
+    TelegramGateway(token, tg.get("allowed_users", []), factory).run()
+
+
 def main(argv=None) -> None:
     argv = argv if argv is not None else sys.argv[1:]
     cfg = load_config()
@@ -87,8 +104,10 @@ def main(argv=None) -> None:
         cmd_chat(cfg)
     elif cmd == "selftest":
         cmd_selftest(cfg)
+    elif cmd == "telegram":
+        cmd_telegram(cfg)
     elif cmd == "setup":
         from .setup import run as setup_run
         setup_run()
     else:
-        print("usage: python -m agent [setup|selftest|chat]")
+        print("usage: python -m agent [setup|selftest|chat|telegram]")
