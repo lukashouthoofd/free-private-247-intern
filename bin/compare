@@ -1,2 +1,0 @@
-#!/usr/bin/env bash
-exec /home/hermes/.hermes/tools-venv/bin/python /home/hermes/.hermes/bin/compare.py "$@"

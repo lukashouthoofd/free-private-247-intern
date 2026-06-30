@@ -89,8 +89,8 @@ agent/         the runtime — model-agnostic LLM client, the gated tool-loop, t
 identity/      SOUL.md (behavior contract, injected every turn) + USER.md (who it serves — you fill it)
 config.example.yaml   pick-your-brain config (copy to config.yaml; setup does this)
 install.sh     dedicated-Debian-box installer
-systemd/       units for 24/7
-bin/           extra deterministic CLI tools you can wire in (zero model quota)
+systemd/       unit template for 24/7
+docs/          SETUP.md — fresh Debian -> always-on walkthrough
 ```
 
 **Design principles** it's built on: cheapest-model-that-works routing; **deterministic tools over

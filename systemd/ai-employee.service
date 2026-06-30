@@ -1,0 +1,29 @@
+# Self-hosted AI employee — 24/7 service (Telegram gateway).
+# EDIT the two paths/user below, then:
+#   sudo cp systemd/ai-employee.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now ai-employee
+#   journalctl -u ai-employee -f
+[Unit]
+Description=Self-hosted AI employee
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/home/youruser/ai-employee
+ExecStart=/home/youruser/ai-employee/.venv/bin/python -m agent telegram
+Restart=on-failure
+RestartSec=10
+# treat the agent as untrusted — OS isolation is the real safety net
+MemoryMax=2G
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/youruser/ai-employee
+
+[Install]
+WantedBy=multi-user.target
