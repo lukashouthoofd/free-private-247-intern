@@ -1,0 +1,137 @@
+"""Test suite — run with:  python -m unittest discover -s tests
+Stdlib-only (unittest), no network, no API key. Covers the safety-critical logic:
+provider routing, the human gates, tool dispatch, Telegram parsing, and the setup writers."""
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from agent.llm import config_from_dict
+from agent.loop import Agent, Tool
+from agent.tools import DEFAULT_TOOLS
+from agent import setup as setup_mod
+from agent.telegram import TelegramGateway
+
+
+class TestProviderRouting(unittest.TestCase):
+    def test_all_aliases_dispatch_to_a_real_provider(self):
+        for alias in ["gemini", "groq", "ollama", "openrouter", "mistral", "openai", "anthropic", "claude-code"]:
+            c = config_from_dict({"provider": alias, "model": "x"})
+            self.assertIn(c.provider, ("openai", "anthropic", "claude-code"), f"{alias} -> {c.provider}")
+
+    def test_gemini_uses_openai_endpoint_and_key(self):
+        c = config_from_dict({"provider": "gemini", "model": "gemini-2.5-flash"})
+        self.assertEqual(c.provider, "openai")
+        self.assertEqual(c.api_key_env, "GEMINI_API_KEY")
+        self.assertIn("generativelanguage", c.base_url)
+
+    def test_custom_base_url_is_kept(self):
+        c = config_from_dict({"provider": "openai", "base_url": "https://x/v1", "model": "m"})
+        self.assertEqual(c.base_url, "https://x/v1")
+
+
+class TestGates(unittest.TestCase):
+    def _agent(self, approver):
+        tools = [
+            Tool("measure", "", {"type": "object", "properties": {}}, lambda a: "ok", "autonomous"),
+            Tool("send", "", {"type": "object", "properties": {}}, lambda a: "SENT", "ask_first"),
+            Tool("create_account", "", {"type": "object", "properties": {}}, lambda a: "MADE", "never"),
+            Tool("boom", "", {"type": "object", "properties": {}},
+                 lambda a: (_ for _ in ()).throw(ValueError("kaboom")), "autonomous"),
+        ]
+        return Agent(configs=[], system="x", tools=tools, approver=approver)
+
+    def test_autonomous_runs(self):
+        self.assertEqual(self._agent(lambda n, a: False)._exec("measure", {}), "ok")
+
+    def test_ask_first_blocked_without_approval(self):
+        self.assertIn("NOT DONE", self._agent(lambda n, a: False)._exec("send", {}))
+
+    def test_ask_first_runs_with_approval(self):
+        self.assertEqual(self._agent(lambda n, a: True)._exec("send", {}), "SENT")
+
+    def test_never_is_refused(self):
+        self.assertIn("REFUSED", self._agent(lambda n, a: True)._exec("create_account", {}))
+
+    def test_unknown_tool(self):
+        self.assertIn("unknown tool", self._agent(lambda n, a: True)._exec("nope", {}))
+
+    def test_tool_crash_is_caught(self):
+        self.assertIn("kaboom", self._agent(lambda n, a: True)._exec("boom", {}))
+
+
+class TestTools(unittest.TestCase):
+    def test_schema_shape(self):
+        t = DEFAULT_TOOLS[0].schema()
+        self.assertEqual(t["type"], "function")
+        self.assertIn("name", t["function"])
+
+    def test_gates_assigned(self):
+        g = {t.name: t.gate for t in DEFAULT_TOOLS}
+        self.assertEqual(g["web_fetch"], "autonomous")
+        self.assertEqual(g["run_shell"], "ask_first")
+        self.assertEqual(g["write_file"], "ask_first")
+
+
+class TestTelegramParsing(unittest.TestCase):
+    def _gw(self, scripted):
+        gw = TelegramGateway.__new__(TelegramGateway)
+        gw.token, gw.allowed, gw.offset, gw.logger = "x", {42}, 0, lambda m: None
+        gw._scripted = list(scripted)
+        gw._api = lambda method, **p: (gw._scripted.pop(0) if gw._scripted else {"ok": True, "result": []})
+        return gw
+
+    def test_pull_parses_and_advances_offset(self):
+        gw = self._gw([{"ok": True, "result": [
+            {"update_id": 10, "message": {"from": {"id": 42}, "chat": {"id": 7}, "text": "hi"}},
+            {"update_id": 11, "message": {"from": {"id": 42}, "chat": {"id": 7}}},  # no text -> skipped
+        ]}])
+        msgs = gw._pull(timeout=0)
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0]["text"], "hi")
+        self.assertEqual(gw.offset, 12)  # advanced past the highest update_id
+
+    def test_wait_reply_returns_text_from_right_chat(self):
+        gw = self._gw([{"ok": True, "result": [
+            {"update_id": 1, "message": {"from": {"id": 42}, "chat": {"id": 7}, "text": "yes"}}]}])
+        self.assertEqual(gw._wait_reply(7, timeout_s=20), "yes")
+
+
+class TestSetupWriters(unittest.TestCase):
+    def test_writes_valid_config_and_user(self):
+        import yaml
+        d = Path(tempfile.mkdtemp())
+        (d / "identity").mkdir()
+        setup_mod.write_config(d, "Aria", "Jane", "gemini", "gemini-2.5-flash", False)
+        setup_mod.write_user(d, "Jane", "founder", "CET")
+        y = yaml.safe_load((d / "config.yaml").read_text())
+        self.assertEqual(y["model"]["provider"], "gemini")
+        self.assertEqual(y["gates"]["never"], ["create_account", "enter_credentials", "solve_captcha", "accept_terms"])
+        self.assertIn("Jane", (d / "identity" / "USER.md").read_text())
+
+
+class TestWebTool(unittest.TestCase):
+    def test_candidates_drop_stopwords(self):
+        from agent.tools_web import _candidates
+        cands = _candidates("Bakkerij Dumalin", "Deinze")
+        self.assertIn("dumalin.be", cands)            # brand token, sector word dropped
+
+    def test_owns_rejects_parked_and_accepts_real(self):
+        from agent.tools_web import _owns
+        self.assertFalse(_owns("<title>Premium Domain For Sale</title>", "Dumalin", "Deinze", False))
+        self.assertTrue(_owns("<title>Bakkerij Dumalin Deinze</title><body>dumalin deinze</body>",
+                              "Bakkerij Dumalin", "Deinze", False))
+
+    def test_strict_com_needs_town(self):
+        from agent.tools_web import _owns
+        # generic .com with the name but no town -> not owned (strict)
+        self.assertFalse(_owns("<title>Steven</title><body>steven</body>", "Slagerij Steven", "Astene", True))
+
+    def test_tool_registered(self):
+        from agent.tools_web import WEB_TOOLS
+        self.assertEqual(WEB_TOOLS[0].name, "verify_website")
+        self.assertEqual(WEB_TOOLS[0].gate, "autonomous")
+
+
+if __name__ == "__main__":
+    unittest.main()

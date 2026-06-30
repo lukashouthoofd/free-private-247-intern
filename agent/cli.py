@@ -8,6 +8,9 @@ from pathlib import Path
 from .llm import complete, config_from_dict, LLMError
 from .loop import Agent
 from .tools import DEFAULT_TOOLS
+from .tools_web import WEB_TOOLS
+
+TOOLS = DEFAULT_TOOLS + WEB_TOOLS
 
 
 def load_config(path: str = "config.yaml") -> dict:
@@ -49,7 +52,7 @@ def _approver(name: str, args: dict) -> bool:
 
 
 def cmd_chat(cfg: dict) -> None:
-    agent = Agent(build_configs(cfg), system_prompt(cfg), DEFAULT_TOOLS,
+    agent = Agent(build_configs(cfg), system_prompt(cfg), TOOLS,
                   max_steps=int((cfg.get("agent") or {}).get("max_steps", 20)), approver=_approver)
     print("agent ready — type a message, Ctrl-C to quit.")
     while True:
@@ -68,7 +71,7 @@ def cmd_selftest(cfg: dict) -> None:
     for c in cfgs:
         keyed = "claude-code (subscription)" if c.provider == "claude-code" else ("key set" if c.api_key else "KEY MISSING")
         print(f"  - {c.provider:11} {c.model:28} [{keyed}]")
-    print(f"tools: {', '.join(t.name + ('' if t.gate == 'autonomous' else f'({t.gate})') for t in DEFAULT_TOOLS)}")
+    print(f"tools: {', '.join(t.name + ('' if t.gate == 'autonomous' else f'({t.gate})') for t in TOOLS)}")
     primary = cfgs[0]
     if primary.api_key or primary.provider == "claude-code":
         try:
@@ -91,7 +94,7 @@ def cmd_telegram(cfg: dict) -> None:
     max_steps = int((cfg.get("agent") or {}).get("max_steps", 20))
 
     def factory(approver):
-        return Agent(configs, system, DEFAULT_TOOLS, max_steps=max_steps, approver=approver)
+        return Agent(configs, system, TOOLS, max_steps=max_steps, approver=approver)
 
     TelegramGateway(token, tg.get("allowed_users", []), factory).run()
 
