@@ -91,10 +91,38 @@ class TestTelegramParsing(unittest.TestCase):
         self.assertEqual(msgs[0]["text"], "hi")
         self.assertEqual(gw.offset, 12)  # advanced past the highest update_id
 
-    def test_wait_reply_returns_text_from_right_chat(self):
+    def test_pull_surfaces_callback_query(self):
+        gw = self._gw([{"ok": True, "result": [
+            {"update_id": 5, "callback_query": {
+                "id": "cb1", "from": {"id": 42},
+                "message": {"chat": {"id": 7}}, "data": "approve"}}]}])
+        msgs = gw._pull(timeout=0)
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0]["data"], "approve")
+        self.assertEqual(msgs[0]["callback_id"], "cb1")
+        self.assertEqual(gw.offset, 6)
+
+    def test_wait_approval_button_approve_returns_true(self):
+        gw = self._gw([{"ok": True, "result": [
+            {"update_id": 1, "callback_query": {
+                "id": "cb1", "from": {"id": 42},
+                "message": {"chat": {"id": 7}}, "data": "approve"}}]}])
+        self.assertTrue(gw._wait_approval(7, timeout_s=20))
+
+    def test_wait_approval_button_deny_returns_false(self):
+        gw = self._gw([{"ok": True, "result": [
+            {"update_id": 1, "callback_query": {
+                "id": "cb2", "from": {"id": 42},
+                "message": {"chat": {"id": 7}}, "data": "deny"}}]}])
+        self.assertFalse(gw._wait_approval(7, timeout_s=20))
+
+    def test_wait_approval_typed_text_fallback(self):
         gw = self._gw([{"ok": True, "result": [
             {"update_id": 1, "message": {"from": {"id": 42}, "chat": {"id": 7}, "text": "yes"}}]}])
-        self.assertEqual(gw._wait_reply(7, timeout_s=20), "yes")
+        self.assertTrue(gw._wait_approval(7, timeout_s=20))
+        gw = self._gw([{"ok": True, "result": [
+            {"update_id": 1, "message": {"from": {"id": 42}, "chat": {"id": 7}, "text": "no"}}]}])
+        self.assertFalse(gw._wait_approval(7, timeout_s=20))
 
 
 class TestSetupWriters(unittest.TestCase):

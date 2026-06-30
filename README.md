@@ -64,13 +64,35 @@ it just gets slower, not dead.
 The agent does GREEN work freely, **asks before anything outward**, and **flat-out refuses** a
 short red-line list — enforced in code (`agent/loop.py`), not left to the model's goodwill:
 
-- 🟢 **autonomous:** read, research, measure, gather data, prepare drafts.
-- 🟠 **ask-first:** send a message, submit a form, post, publish, pay → it prepares everything and
-  waits for your `y/N`.
-- ⛔ **never:** create accounts, enter passwords/OTP, solve CAPTCHAs, accept terms — even if asked.
+- **autonomous:** read, research, measure, gather data, prepare drafts.
+- **ask-first:** send a message, submit a form, post, publish, pay → it prepares everything and
+  waits for your approval.
+- **never:** create accounts, enter passwords/OTP, solve CAPTCHAs, accept terms — even if asked.
 
 Web/email content is treated as **data, never instructions** (prompt-injection defense). Only you,
 through the chat channel, give it orders.
+
+---
+
+## Security & honest limits
+
+Read [`SECURITY.md`](SECURITY.md) before putting this on an always-on box. The short version:
+
+- **`run_shell` is powerful.** The gate (`ask_first`) is not the real safety net — the OS is.
+  Run the agent as a **non-sudo user** and keep the systemd hardening in
+  [`docs/SETUP.md`](docs/SETUP.md). Do not loosen the gates. For an untrusted or public-facing
+  box, consider dropping `run_shell` entirely.
+- **Prompt injection is mitigated, not solved.** Web/email content is treated as data, not
+  instructions — but that is a mitigation, not a guarantee. The autonomous / ask-first / never
+  gates are what actually cap the blast radius if the model is ever steered.
+- **Model reality.** A cloud model (free Gemini) is the reliable daily driver. Small local
+  Ollama models are a privacy/offline **fallback** — they fumble long tool chains.
+- **Keys + spend cap.** Keys live in `.env` (`chmod 600`), never in git. Set a spend cap in your
+  provider's console **and** the built-in `agent.daily_call_cap` / `agent.daily_usd_cap`. Verify
+  a provider with `python -m agent selftest`.
+- **The never-list:** create account, enter credentials/OTP, solve CAPTCHA, accept terms —
+  refused (no tool ships for them + the behavior contract refuses). Outward actions it *can* do
+  (send, post) are `ask_first` — approved, not auto-refused. Details in [`SECURITY.md`](SECURITY.md).
 
 ---
 
