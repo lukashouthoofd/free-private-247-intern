@@ -1,0 +1,16 @@
+# Fires ai-employee-digest.service every morning ~06:00 local time.
+# Enable with:  sudo systemctl enable --now ai-employee-digest.timer
+# (matches schedule.digest_hour in config.yaml — keep the two in sync if you change the hour.)
+[Unit]
+Description=Self-hosted AI employee — daily digest timer
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+# if the box was asleep/off at 06:00, run as soon as it's back
+Persistent=true
+# small jitter so it doesn't hammer providers at exactly :00
+RandomizedDelaySec=120
+Unit=ai-employee-digest.service
+
+[Install]
+WantedBy=timers.target

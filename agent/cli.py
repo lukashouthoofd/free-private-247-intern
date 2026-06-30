@@ -9,8 +9,10 @@ from .llm import complete, config_from_dict, LLMError
 from .loop import Agent
 from .tools import DEFAULT_TOOLS
 from .tools_web import WEB_TOOLS
+from .memory import MEMORY_TOOLS
+from .tools_email import EMAIL_TOOLS
 
-TOOLS = DEFAULT_TOOLS + WEB_TOOLS
+TOOLS = DEFAULT_TOOLS + WEB_TOOLS + MEMORY_TOOLS + EMAIL_TOOLS
 
 
 def load_dotenv(path: str = ".env") -> None:
@@ -114,9 +116,15 @@ def cmd_telegram(cfg: dict) -> None:
 
 
 def main(argv=None) -> None:
+    for stream in (sys.stdout, sys.stderr):   # never crash on a non-UTF-8 console (Windows cp1252)
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     argv = argv if argv is not None else sys.argv[1:]
     load_dotenv()
     cfg = load_config()
+    os.environ.setdefault("MEMORY_DIR", str((cfg.get("memory") or {}).get("dir", "./data/memory")))
     cmd = argv[0] if argv else "selftest"
     if cmd == "chat":
         cmd_chat(cfg)
@@ -124,8 +132,11 @@ def main(argv=None) -> None:
         cmd_selftest(cfg)
     elif cmd == "telegram":
         cmd_telegram(cfg)
+    elif cmd == "digest":
+        from .digest import deliver
+        deliver(cfg)
     elif cmd == "setup":
         from .setup import run as setup_run
         setup_run()
     else:
-        print("usage: python -m agent [setup|selftest|chat|telegram]")
+        print("usage: python -m agent [setup|selftest|chat|telegram|digest]")

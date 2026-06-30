@@ -47,5 +47,10 @@ memory:
 
 # The "digest" + "reflection" patterns (wired by the systemd timers in systemd/).
 schedule:
-  digest_hour: 6               # pre-compute a daily brief before you wake up
+  digest_hour: 6               # pre-compute a daily brief before you wake up (systemd/ai-employee-digest.timer)
   reflection_weekday: sun      # weekly fail-closed self-reflection
+  # digest_chat_id: 123456789  # Telegram chat to send the daily brief to (else uses channels.telegram.allowed_users)
+
+# Email tool (optional) — the agent can read your inbox + DRAFT replies (sending is human-gated).
+# Put the credentials in .env, NOT here:
+#   EMAIL_IMAP_HOST, EMAIL_SMTP_HOST, EMAIL_ADDRESS, EMAIL_PASSWORD  (+ optional EMAIL_SMTP_PORT, default 465)
