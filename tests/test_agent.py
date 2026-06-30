@@ -69,8 +69,75 @@ class TestTools(unittest.TestCase):
     def test_gates_assigned(self):
         g = {t.name: t.gate for t in DEFAULT_TOOLS}
         self.assertEqual(g["web_fetch"], "autonomous")
-        self.assertEqual(g["run_shell"], "ask_first")
         self.assertEqual(g["write_file"], "ask_first")
+        self.assertNotIn("run_shell", g)          # opt-in only — not in the safe default set
+
+    def test_run_shell_is_opt_in(self):
+        from agent.tools import build_default_tools
+        names = lambda cfg: {t.name for t in build_default_tools(cfg)}
+        self.assertNotIn("run_shell", names({}))
+        self.assertNotIn("run_shell", names({"tools": {"run_shell": {"enabled": False}}}))
+        enabled = build_default_tools({"tools": {"run_shell": {"enabled": True}}})
+        self.assertEqual({t.name: t.gate for t in enabled}.get("run_shell"), "ask_first")
+
+    def test_run_shell_enable_is_strict(self):
+        # a QUOTED yaml 'false'/'no' loads as a string; bool('false') is True, so it must NOT enable
+        from agent.tools import build_default_tools
+        has = lambda v: "run_shell" in {t.name for t in build_default_tools({"tools": {"run_shell": {"enabled": v}}})}
+        for off in ("false", "no", "off", "0", "", 0, None):
+            self.assertFalse(has(off), f"{off!r} must not enable run_shell")
+        for on in (True, "true", "yes", "on", "1", 1):
+            self.assertTrue(has(on), f"{on!r} should enable run_shell")
+
+
+class TestToolHardening(unittest.TestCase):
+    def test_write_file_refuses_outside_workdir(self):
+        import os, tempfile
+        from agent import tools as tl
+        d = tempfile.mkdtemp()
+        os.environ["AGENT_WORKDIR"] = d
+        try:
+            outside = os.path.join(os.path.dirname(d), "escape_outside.txt")
+            r = tl._write_file({"path": outside, "content": "x"})
+            self.assertIn("refused", r.lower())
+            self.assertFalse(os.path.exists(outside))   # nothing written outside the jail
+        finally:
+            os.environ.pop("AGENT_WORKDIR", None)
+
+    def test_write_file_allows_inside_workdir(self):
+        import os, tempfile
+        from agent import tools as tl
+        d = tempfile.mkdtemp()
+        os.environ["AGENT_WORKDIR"] = d
+        try:
+            inside = os.path.join(d, "sub", "ok.txt")
+            r = tl._write_file({"path": inside, "content": "hello"})
+            self.assertIn("wrote", r)
+            with open(inside, encoding="utf-8") as f:
+                self.assertEqual(f.read(), "hello")
+        finally:
+            os.environ.pop("AGENT_WORKDIR", None)
+
+    def test_run_shell_uses_argv_not_shell(self):
+        # the injection ';' must become an inert arg, not a chained second command
+        from agent import tools as tl
+        captured = {}
+
+        def fake_run(argv, **kw):
+            captured["argv"], captured["kw"] = argv, kw
+
+            class R:
+                stdout, stderr, returncode = "ok", "", 0
+            return R()
+
+        orig = tl.subprocess.run
+        tl.subprocess.run = fake_run
+        try:
+            tl._run_shell({"command": "echo hi; rm -rf /"})
+        finally:
+            tl.subprocess.run = orig
+        self.assertEqual(captured["argv"], ["echo", "hi;", "rm", "-rf", "/"])
+        self.assertNotIn("shell", captured["kw"])       # no shell=True
 
 
 class TestTelegramParsing(unittest.TestCase):

@@ -47,9 +47,22 @@ if [ ! -f .env ]; then
 fi
 mkdir -p data/memory
 
-# 4. Done — next steps.
+# 4. Generate systemd units for THIS machine (fill in the real user + paths — no manual editing).
+say "Writing systemd units for this machine into systemd/generated/"
+REPO_DIR="$(pwd)"
+RUN_USER="$(id -un)"
+mkdir -p systemd/generated
+for unit in ai-employee.service ai-employee-digest.service ai-employee-reflect.service; do
+  sed -e "s#/home/youruser/ai-employee#${REPO_DIR}#g" \
+      -e "s#^User=youruser#User=${RUN_USER}#" \
+      "systemd/${unit}" > "systemd/generated/${unit}"
+done
+cp systemd/ai-employee-digest.timer systemd/ai-employee-reflect.timer systemd/generated/ 2>/dev/null || true
+echo "  units use  User=${RUN_USER}  WorkingDirectory=${REPO_DIR}  (ready to copy, no edits needed)"
+
+# 5. Done — next steps.
 say "Installed. Next:"
-cat <<'EOF'
+cat <<EOF
   ./.venv/bin/python -m agent setup      # one-time wizard: pick your brain + paste a key
   ./.venv/bin/python -m agent selftest   # verify providers/tools/key
   ./.venv/bin/python -m agent chat        # talk to it
@@ -57,5 +70,11 @@ cat <<'EOF'
   Brains you can pick (in setup): gemini (free) · claude-code (your Claude subscription)
   · openai · groq · openrouter · mistral · ollama (fully local) · anthropic
 
-  For 24/7 unattended operation (dedicated box): see docs/SETUP.md + systemd/.
+  For 24/7 unattended operation (dedicated box) — units were generated for you:
+    sudo cp systemd/generated/*.service systemd/generated/*.timer /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now ai-employee                                   # the Telegram gateway
+    sudo systemctl enable --now ai-employee-digest.timer ai-employee-reflect.timer
+    journalctl -u ai-employee -f
+  (full walkthrough: docs/SETUP.md)
 EOF

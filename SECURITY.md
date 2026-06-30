@@ -10,29 +10,40 @@ The agent runs code you did not write the prompt for: a model decides what tools
 some of those tools (`run_shell`, `write_file`) touch the machine. The defenses below are layers
 that cap the damage when — not if — the model does something you did not intend.
 
-## 1. `run_shell` is the powerful one — the OS is the real safety net
+## 1. `run_shell` is the powerful one — OFF by default, OS is the real safety net
 
-`run_shell` runs an arbitrary command on the box (`agent/tools.py`). It is gated `ask_first`, so
-the model cannot fire it without your `y/N` over the chat channel — but a tool this broad should
-not lean on the gate alone.
+`run_shell` runs a command on the box (`agent/tools.py`). It is the largest piece of attack
+surface, so it ships **disabled**. The agent has no shell tool at all unless you opt in with
+`tools.run_shell.enabled: true` in `config.yaml`. Most day-to-day work (read, research, draft,
+email) never needs it — leave it off.
 
-The layer that actually holds if the model is ever tricked is the operating system:
+When you do enable it, two things narrow the blast radius before the OS even matters:
+
+- It is gated **`ask_first`** — the model cannot fire it without your Approve over the chat channel.
+- It runs an **argv list, not a shell** (no `shell=True`). Shell metacharacters (`;`, `|`, `&&`,
+  `$()`, redirects, globs) are inert, so the model cannot smuggle a second command past the one
+  you approved. A `write_file` tool is similarly **jailed to the agent's working directory** —
+  it refuses any path that resolves outside it.
+
+The layer that actually holds if the model is ever tricked is still the operating system:
 
 - **Run the agent as a NON-SUDO user.** A command the agent runs then cannot escalate, cannot
   touch other users' files, cannot reconfigure the box. This is the single most important step.
 - **Keep the systemd hardening** from [`docs/SETUP.md`](docs/SETUP.md) section 4:
   `NoNewPrivileges=true`, `ProtectSystem=strict`, `PrivateTmp=true`, a narrow `ReadWritePaths=`,
   and `MemoryMax=`. Together they confine the process to its own directory and stop privilege
-  escalation even if a command tries.
+  escalation even if a command tries. (`install.sh` renders these units for you with your real
+  user + paths into `systemd/generated/`.)
 
 Advice:
 
 - **Do not loosen the gates.** Leaving `write_file` / `run_shell` on `ask_first` is deliberate;
   moving them to `autonomous` removes the human checkpoint on every machine-touching action.
-- **For an untrusted or public-facing box, consider dropping `run_shell` entirely** — remove it
-  from `DEFAULT_TOOLS` in `agent/tools.py`. The agent loses the ability to run commands, and you
-  lose the largest piece of attack surface. Most day-to-day work (read, research, draft, email)
-  does not need it.
+- **Keep `run_shell` off unless you genuinely need it.** Enabling it is one config line; the
+  default is no-shell-tool precisely so an untrusted or public-facing box has the smallest
+  surface out of the box.
+- **The chat channel is fail-closed.** An empty `allowed_users` means the Telegram bot rejects
+  *everyone* (not "anyone"), and only allow-listed users can approve an `ask_first` action.
 
 ## 2. Prompt injection is mitigated, not solved
 

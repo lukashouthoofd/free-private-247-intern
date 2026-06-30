@@ -35,7 +35,14 @@ channels:
   cli: true                    # always-on local REPL (`agent chat`)
   telegram:
     enabled: false             # token in .env (TELEGRAM_BOT_TOKEN)
-    allowed_users: []          # numeric chat IDs allowed to talk to it (empty = nobody)
+    allowed_users: []          # numeric chat IDs allowed to talk to it (empty = nobody — fail closed)
+
+# Optional tools that are OFF by default for safety — enable knowingly.
+tools:
+  run_shell:
+    enabled: false             # arbitrary command execution on the box (ask_first, argv — no shell).
+                               # Off by default: it's the largest attack surface. Most work
+                               # (read, research, draft, email) doesn't need it.
 
 # Human-in-the-loop. The agent does GREEN freely, ASKS before anything outward, NEVER does RED.
 gates:

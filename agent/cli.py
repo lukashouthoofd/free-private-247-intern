@@ -7,13 +7,17 @@ from pathlib import Path
 
 from .llm import complete, config_from_dict, LLMError
 from .loop import Agent
-from .tools import DEFAULT_TOOLS
+from .tools import build_default_tools
 from .tools_web import WEB_TOOLS
 from .memory import MEMORY_TOOLS
 from .tools_email import EMAIL_TOOLS
 from .usage import USAGE_TOOLS
 
-TOOLS = DEFAULT_TOOLS + WEB_TOOLS + MEMORY_TOOLS + EMAIL_TOOLS + USAGE_TOOLS
+
+def build_tools(cfg: dict) -> list:
+    """Assemble the live toolset. run_shell is included only when config opts in
+    (tools.run_shell.enabled: true) — see agent/tools.build_default_tools."""
+    return build_default_tools(cfg) + WEB_TOOLS + MEMORY_TOOLS + EMAIL_TOOLS + USAGE_TOOLS
 
 
 def load_dotenv(path: str = ".env") -> None:
@@ -76,7 +80,7 @@ def _approver(name: str, args: dict) -> bool:
 
 
 def cmd_chat(cfg: dict) -> None:
-    agent = Agent(build_configs(cfg), system_prompt(cfg), TOOLS,
+    agent = Agent(build_configs(cfg), system_prompt(cfg), build_tools(cfg),
                   max_steps=int((cfg.get("agent") or {}).get("max_steps", 20)), approver=_approver, usage_cfg=cfg)
     print("agent ready — type a message, Ctrl-C to quit.")
     while True:
@@ -95,7 +99,8 @@ def cmd_selftest(cfg: dict) -> None:
     for c in cfgs:
         keyed = "claude-code (subscription)" if c.provider == "claude-code" else ("key set" if c.api_key else "KEY MISSING")
         print(f"  - {c.provider:11} {c.model:28} [{keyed}]")
-    print(f"tools: {', '.join(t.name + ('' if t.gate == 'autonomous' else f'({t.gate})') for t in TOOLS)}")
+    tools = build_tools(cfg)
+    print(f"tools: {', '.join(t.name + ('' if t.gate == 'autonomous' else f'({t.gate})') for t in tools)}")
     primary = cfgs[0]
     if primary.api_key or primary.provider == "claude-code":
         try:
@@ -114,11 +119,11 @@ def cmd_telegram(cfg: dict) -> None:
     if not token:
         print("set TELEGRAM_BOT_TOKEN in .env, and channels.telegram.allowed_users in config.yaml")
         return
-    configs, system = build_configs(cfg), system_prompt(cfg)
+    configs, system, tools = build_configs(cfg), system_prompt(cfg), build_tools(cfg)
     max_steps = int((cfg.get("agent") or {}).get("max_steps", 20))
 
     def factory(approver):
-        return Agent(configs, system, TOOLS, max_steps=max_steps, approver=approver, usage_cfg=cfg)
+        return Agent(configs, system, tools, max_steps=max_steps, approver=approver, usage_cfg=cfg)
 
     TelegramGateway(token, tg.get("allowed_users", []), factory).run()
 

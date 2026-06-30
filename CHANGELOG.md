@@ -47,4 +47,29 @@ The initial set of shipped capabilities for "Your free, private, 24/7 intern" �
 - **Test suite** — stdlib `unittest` tests covering the agent loop, gates, email, memory, usage,
   and reflection (no network, no credentials).
 
+### Security
+
+- **`run_shell` ships disabled** (`agent/tools.py`, `agent/cli.py`) — the shell tool is opt-in via
+  `tools.run_shell.enabled: true`; by default the agent has no command-execution tool. When
+  enabled it runs an **argv list (no `shell=True`)**, so shell metacharacters can't chain a second
+  command past the approved one (keeps the child-env secret scrub). Strict opt-in parsing so a
+  quoted `'false'` can't silently enable it.
+- **`write_file` is jailed to the working directory** (`agent/tools.py`) — paths that resolve
+  (via `realpath`, so `..`/symlinks can't escape) outside the agent's working dir are refused.
+
+  (The SSRF egress guard, `read_file` secret-denylist, fail-closed gates, and Telegram
+  refuse-to-start-on-empty-allow-list landed in the preceding hardening pass; this change builds
+  on top of them.)
+
+### Changed
+
+- **`install.sh` renders machine-specific systemd units** into `systemd/generated/` with the real
+  `User=`/paths filled in — no more copying units that contain literal `youruser` placeholders.
+  The committed `systemd/*.service` files remain the editable templates.
+- **`docs/SETUP.md`** points at the generated units and fixes the example `ExecStart` to run the
+  headless Telegram gateway (`-m agent telegram`) instead of the interactive `chat` (which has no
+  stdin under systemd and would restart-loop).
+- **`.env.example`** rewritten to match the keys the code actually reads (dropped stale
+  `~/.hermes` paths and unused vars).
+
 [Unreleased]: https://github.com/lukashouthoofd/free-private-247-intern

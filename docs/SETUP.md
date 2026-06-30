@@ -36,8 +36,24 @@ If you chose `claude-code`, run `claude setup-token` once. If you chose `ollama`
 `ollama pull <model>` first.
 
 ## 4. Run it 24/7 (systemd)
-Run the agent under its own user, auto-restarting, surviving reboots. Create
-`/etc/systemd/system/ai-employee.service` (adjust `User=` and the path):
+Run the agent under its own user, auto-restarting, surviving reboots. **`./install.sh` already
+rendered ready-to-use units** into `systemd/generated/` with your real user and paths filled in —
+no editing. Just copy and enable them:
+
+```bash
+sudo cp systemd/generated/*.service systemd/generated/*.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ai-employee                                 # the chat gateway (Telegram)
+sudo systemctl enable --now ai-employee-digest.timer ai-employee-reflect.timer
+journalctl -u ai-employee -f          # watch it
+```
+
+The shipped service runs the **Telegram gateway** (`-m agent telegram`), the real headless
+channel — so first set `channels.telegram.enabled: true`, add your numeric id to
+`allowed_users`, and put `TELEGRAM_BOT_TOKEN` in `.env`. (The CLI `chat` is interactive and has
+no stdin under systemd, so it is **not** what the service runs.)
+
+<details><summary>Manual template (if you'd rather write the unit yourself)</summary>
 
 ```ini
 [Unit]
@@ -49,7 +65,7 @@ Wants=network-online.target
 Type=simple
 User=youruser
 WorkingDirectory=/home/youruser/ai-employee
-ExecStart=/home/youruser/ai-employee/.venv/bin/python -m agent chat
+ExecStart=/home/youruser/ai-employee/.venv/bin/python -m agent telegram
 Restart=on-failure
 RestartSec=10
 # hardening: the agent is treated as untrusted
@@ -57,20 +73,16 @@ MemoryMax=2G
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
+ProtectHome=read-only
 ReadWritePaths=/home/youruser/ai-employee
 
 [Install]
 WantedBy=multi-user.target
 ```
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now ai-employee
-journalctl -u ai-employee -f          # watch it
-```
-> The CLI `chat` is interactive; for a true headless gateway use the Telegram channel
-> (`channels.telegram.enabled: true` + `TELEGRAM_BOT_TOKEN` in `.env`) so you talk to it from
-> your phone. Scheduled jobs (daily digest, weekly reflection) go in their own systemd `*.timer`
-> units — see `config.yaml` `schedule:`.
+</details>
+
+> Scheduled jobs (daily digest, weekly reflection) are the `*.timer` units you enabled above —
+> their cadence matches `config.yaml` `schedule:`.
 
 ## 5. Safety on an unattended box
 - Run the agent as a **non-sudo user** — that's the layer that holds if the model is ever tricked.
