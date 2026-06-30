@@ -1,0 +1,3 @@
+# Runtime deps for the self-hosted AI employee. Deliberately tiny — the LLM client and tools
+# use only the Python standard library, so this runs on any old Debian box with Python 3.
+pyyaml>=6        # read config.yaml
