@@ -12,7 +12,9 @@ the facts are measured. Register it by importing WEB_TOOLS (the CLI already does
 """
 from __future__ import annotations
 
+import ipaddress
 import re
+import socket
 import urllib.request
 
 from .loop import Tool
@@ -21,6 +23,7 @@ _UA = "self-hosted-ai-employee/0.1"
 _DIRECTORY = re.compile(r"(^|\.)(facebook|instagram|linkedin|goudengids|goldenpages|tripadvisor|"
                         r"resengo|joyn|deliveroo|ubereats|takeaway|yelp|google\.|maps\.|sitew\.|"
                         r"wixsite|jimdo|one\.com|trustpilot|booking)\.", re.I)
+_DIRECTORY_ONECOM = re.compile(r"(^|\.)one\.com$", re.I)
 _PARKED = re.compile(r"(domain (is|may be) for sale|premium domain|domain for sale|parkingcrew|"
                      r"website coming soon|under construction|te koop)", re.I)
 _STOP = {"de", "het", "een", "en", "van", "bakkerij", "slagerij", "kapsalon", "restaurant",
@@ -43,7 +46,7 @@ def _host(u: str) -> str:
 def _candidates(name: str, town: str):
     full = re.sub(r"[^a-z0-9]", "", _strip(name).replace(" ", ""))
     toks = _tokens(name)
-    brand = max(toks, key=len) if toks else full
+    brand = max((t for t in toks if len(t) >= 4), key=len, default=None) or (full if len(full) >= 4 else None)
     out = []
     for base in dict.fromkeys([full, brand]):
         if base:
@@ -53,6 +56,15 @@ def _candidates(name: str, town: str):
 
 def _fetch(url: str):
     try:
+        m = re.match(r"https?://([^/:]+)", url, re.I)
+        if m:
+            for *_, (addr, *__) in socket.getaddrinfo(m.group(1), None):
+                try:
+                    ip = ipaddress.ip_address(addr)
+                except ValueError:
+                    continue
+                if ip.is_private or ip.is_loopback or ip.is_link_local:
+                    return None, None  # block SSRF to internal hosts
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
         with urllib.request.urlopen(req, timeout=9) as r:
             final = r.geturl()
@@ -66,15 +78,15 @@ def _owns(html: str, name: str, town: str, strict: bool) -> bool:
     title = _strip(" ".join(re.findall(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)[:1]
                             + re.findall(r"<h1[^>]*>(.*?)</h1>", html, re.I | re.S)[:1]))
     body = _strip(re.sub(r"<[^>]+>", " ", html))[:20000]
-    if _PARKED.search(title):
+    if _PARKED.search(title) or _PARKED.search(body[:2000]):
         return False
     toks = _tokens(name)
     if not toks:
         return False
     name_in_body = sum(t in body for t in toks)
     name_in_title = any(t in title for t in toks)
-    t = re.sub(r"[^a-z0-9]", "", _strip(town)) if town else ""   # whole town (handles "De Pinte" etc.)
-    town_hit = len(t) >= 4 and t in (title + body)
+    t = _strip(town).strip() if town else ""   # whole town (handles "De Pinte" etc.)
+    town_hit = len(t) >= 4 and t in (title + " " + body)
     if strict:
         return (name_in_title or name_in_body >= 1) and town_hit
     if name_in_body >= 2:
@@ -90,10 +102,10 @@ def _verify_website(args: dict) -> str:
     if not name:
         return "ERROR: need a business name"
     for cand in _candidates(name, town):
-        if _DIRECTORY.search(cand):
+        if _DIRECTORY.search(cand) or _DIRECTORY_ONECOM.search(cand):
             continue
         final, html = _fetch("https://" + cand)
-        if not html or _DIRECTORY.search(_host(final or "")):
+        if not html or _DIRECTORY.search(_host(final or "")) or _DIRECTORY_ONECOM.search(_host(final or "")):
             continue
         if _host(final or "").split(".")[-2:] != cand.split(".")[-2:]:
             continue  # redirected off the guessed domain

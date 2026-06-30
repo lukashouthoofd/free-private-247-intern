@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -39,6 +40,7 @@ class LLMConfig:
     temperature: float = 0.3
     timeout: int = 120
     extra_headers: dict[str, str] = field(default_factory=dict)
+    alias: str = ""                   # original config alias (gemini/groq/...) for diagnostics
 
     @property
     def api_key(self) -> str:
@@ -57,6 +59,9 @@ PRESETS: dict[str, dict[str, Any]] = {
     "claude-code": {"provider": "claude-code", "base_url": "", "api_key_env": ""},
 }
 
+# Real dispatch providers; an alias must be a preset key or one of these (else it's a typo).
+_CANONICAL_PROVIDERS: frozenset[str] = frozenset({"openai", "anthropic", "claude-code"})
+
 
 def config_from_dict(d: dict[str, Any]) -> LLMConfig:
     """Build an LLMConfig from a config.yaml `model:` block.
@@ -70,6 +75,8 @@ def config_from_dict(d: dict[str, Any]) -> LLMConfig:
     # The preset supplies the REAL dispatch provider (openai/anthropic/claude-code) + base_url +
     # key env. Pop the alias first so it can't clobber the preset's real provider on update().
     alias = d.pop("provider", "openai")
+    if alias not in PRESETS and alias not in _CANONICAL_PROVIDERS:
+        raise LLMError(f"unknown provider alias '{alias}' — valid aliases: {sorted(PRESETS)}")
     merged = dict(PRESETS.get(alias) or {"provider": alias})
     merged.update({k: v for k, v in d.items() if v is not None})
     return LLMConfig(
@@ -81,6 +88,7 @@ def config_from_dict(d: dict[str, Any]) -> LLMConfig:
         temperature=float(merged.get("temperature", 0.3)),
         timeout=int(merged.get("timeout", 120)),
         extra_headers=merged.get("extra_headers", {}) or {},
+        alias=alias,
     )
 
 
@@ -92,8 +100,15 @@ def _http_json(url: str, payload: dict, headers: dict, timeout: int) -> dict:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:600]
+        if e.code in (429, 503):  # transient: honor Retry-After (capped) before falling through
+            ra = e.headers.get("Retry-After", "") or ""
+            try:
+                wait = min(float(ra), 30.0)
+            except (ValueError, TypeError):
+                wait = 2.0
+            time.sleep(wait)
         raise LLMError(f"HTTP {e.code} from {url}: {body}") from e
-    except (urllib.error.URLError, TimeoutError) as e:
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise LLMError(f"connection error to {url}: {e}") from e
 
 
@@ -105,7 +120,7 @@ def _norm(content: str = "", tool_calls: list | None = None, usage: dict | None 
 
 def _complete_openai(cfg: LLMConfig, messages: list[dict], tools: list | None) -> dict:
     if not cfg.api_key and "localhost" not in cfg.base_url:
-        raise LLMError(f"no API key in ${cfg.api_key_env} for provider {cfg.provider}/{cfg.model}")
+        raise LLMError(f"no API key in ${cfg.api_key_env} for provider {cfg.alias or cfg.provider}/{cfg.model}")
     payload: dict[str, Any] = {"model": cfg.model, "messages": messages,
                                "max_tokens": cfg.max_tokens, "temperature": cfg.temperature}
     if tools:
@@ -113,7 +128,9 @@ def _complete_openai(cfg: LLMConfig, messages: list[dict], tools: list | None) -
         payload["tool_choice"] = "auto"
     headers = {"Authorization": f"Bearer {cfg.api_key}", **cfg.extra_headers}
     data = _http_json(cfg.base_url.rstrip("/") + "/chat/completions", payload, headers, cfg.timeout)
-    msg = (data.get("choices") or [{}])[0].get("message", {}) or {}
+    if not data.get("choices"):  # HTTP-200 error body / empty choices -> surface, don't fake success
+        raise LLMError(f"OpenAI returned no choices: {str(data)[:300]}")
+    msg = data["choices"][0].get("message", {}) or {}
     return _norm(msg.get("content") or "", msg.get("tool_calls") or [], data.get("usage"), data)
 
 
@@ -155,6 +172,8 @@ def _complete_anthropic(cfg: LLMConfig, messages: list[dict], tools: list | None
         elif block.get("type") == "tool_use":
             calls.append({"id": block.get("id"), "type": "function",
                           "function": {"name": block.get("name"), "arguments": json.dumps(block.get("input", {}))}})
+    if data.get("type") == "error":  # HTTP-200 error body -> surface, don't fake success
+        raise LLMError(f"Anthropic error: {data.get('error', data)}")
     return _norm(text, calls, data.get("usage"), data)
 
 
@@ -178,7 +197,10 @@ def _complete_claude_code(cfg: LLMConfig, messages: list[dict], tools: list | No
         j = json.loads(out.stdout)
         return _norm(j.get("result", out.stdout), [], {"total_cost_usd": j.get("total_cost_usd")}, j)
     except json.JSONDecodeError:
-        return _norm(out.stdout.strip(), [], {}, out.stdout)
+        text = out.stdout.strip()
+        if not text:  # exit 0 + empty stdout = silent auth/subscription failure; surface it
+            raise LLMError("claude -p exited 0 but produced no output (check subscription/auth)")
+        return _norm(text, [], {}, out.stdout)
 
 
 _DISPATCH = {"openai": _complete_openai, "anthropic": _complete_anthropic, "claude-code": _complete_claude_code}
