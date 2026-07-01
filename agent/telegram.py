@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Callable
@@ -37,6 +38,7 @@ class TelegramGateway:
         self.agent_factory = agent_factory          # (approver) -> Agent
         self.logger = logger
         self.offset = 0
+        self._pending: list[dict] = []   # updates pulled during _wait_approval, re-queued for run()
 
     def _api(self, method: str, **params) -> dict:
         url = API.format(token=self.token, method=method)
@@ -48,11 +50,24 @@ class TelegramGateway:
         try:
             with urllib.request.urlopen(req, timeout=40) as r:
                 return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 429:                               # rate-limited: honour Retry-After before backing off
+                try:
+                    retry_after = int(e.headers.get("Retry-After", 5))
+                except (TypeError, ValueError):
+                    retry_after = 5
+                self.logger(f"telegram 429 ({method}): sleeping {retry_after}s")
+                time.sleep(retry_after)
+            else:
+                self.logger(f"telegram http error ({method}): {e.code}")
+            return {"ok": False}
         except Exception as e:
             self.logger(f"telegram api error ({method}): {e}")
             return {"ok": False}
 
     def send(self, chat_id: int, text: str, reply_markup: dict | None = None) -> None:
+        if not text:
+            return                                          # Telegram rejects empty text; nothing to send
         chunks = range(0, max(1, len(text)), 4000)         # Telegram caps messages at 4096 chars
         n = len(text)
         for i in chunks:
@@ -90,10 +105,12 @@ class TelegramGateway:
 
         Returns True for Approve, False for Deny / timeout. Button presses are
         acknowledged via answerCallbackQuery so the button stops spinning."""
-        elapsed = 0
-        while elapsed < timeout_s:
-            for m in self._pull(timeout=20):
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            pulled = self._pull(timeout=20)
+            for m in pulled:
                 if m["chat_id"] != chat_id or (self.allowed and m["uid"] not in self.allowed):
+                    self._pending.append(m)                 # not for us: re-queue so run() can process it
                     continue
                 if m.get("callback_id"):                    # button press
                     decision = m.get("data") == "approve"
@@ -101,25 +118,42 @@ class TelegramGateway:
                               text="Approved" if decision else "Denied")
                     return decision
                 # typed-text fallback: only yes/no count as a vote; any other text (a new task,
-                # a stray message) is ignored so it can't be mistaken for a "deny".
+                # a stray message) is re-queued so run() can process it instead of dropping it.
                 t = m["text"].strip().lower()
                 if t in _OK:
                     return True
                 if t in _NO:
                     return False
+                self._pending.append(m)
                 continue
-            elapsed += 20
+            if not pulled:
+                time.sleep(1)                               # back off when _api fast-fails (e.g. conn refused)
         return False
 
     def run(self) -> None:
-        me = self._api("getMe")
-        if not me.get("ok"):
-            raise SystemExit("Telegram: bad token (set TELEGRAM_BOT_TOKEN in .env). getMe failed.")
+        me = None                                           # retry getMe: a transient blip must not look like a bad token
+        for attempt in range(1, 4):
+            me = self._api("getMe")
+            if me.get("ok"):
+                break
+            self.logger(f"Telegram: getMe failed (attempt {attempt}/3) — retrying in 5 s")
+            if attempt < 3:
+                time.sleep(5)
+        if not (me and me.get("ok")):
+            raise SystemExit("Telegram: getMe failed after 3 attempts — check TELEGRAM_BOT_TOKEN and network.")
+        if not self.allowed:                                # fail closed: an empty allow-list = open relay to the agent
+            raise SystemExit("Telegram: allowed_users is empty — refusing to start an open bot. "
+                             "Set allowed_users: [<your numeric id>] in config.yaml.")
         self.logger(f"telegram gateway up as @{me['result'].get('username')} "
                     f"(allowed users: {sorted(self.allowed) or 'ANYONE — set allowed_users!'})")
         while True:
-            for m in self._pull():
+            pending, self._pending = self._pending, []      # process re-queued updates from _wait_approval first
+            for m in pending + self._pull():
                 chat_id, uid, text = m["chat_id"], m["uid"], m["text"]
+                if m.get("callback_id"):                    # stale/late Approve/Deny press, no pending gate
+                    self._api("answerCallbackQuery", callback_query_id=m["callback_id"],
+                              text="No pending approval.")
+                    continue
                 if self.allowed and uid not in self.allowed:
                     self.send(chat_id, "Sorry, you're not on this agent's allow-list.")
                     self.logger(f"ignored message from {uid}")

@@ -27,6 +27,10 @@ class Tool:
     fn: Callable[[dict], object]     # (args) -> result (stringified for the model)
     gate: str = "autonomous"         # autonomous | ask_first | never
 
+    def __post_init__(self) -> None:
+        if self.gate not in ("autonomous", "ask_first", "never"):
+            raise ValueError(f"invalid gate {self.gate!r} for tool {self.name!r}")
+
     def schema(self) -> dict:
         return {"type": "function", "function": {
             "name": self.name, "description": self.description, "parameters": self.parameters}}
@@ -64,6 +68,10 @@ class Agent:
             messages.append({"role": "assistant", "content": out.get("content") or "", "tool_calls": calls})
             for c in calls:
                 name = (c.get("function") or {}).get("name", "")
+                if not name:
+                    messages.append({"role": "tool", "tool_call_id": c.get("id"), "name": "",
+                                     "content": "ERROR: tool_call missing function name (protocol error)"})
+                    continue
                 try:
                     args = json.loads((c.get("function") or {}).get("arguments") or "{}")
                 except json.JSONDecodeError:
@@ -77,6 +85,8 @@ class Agent:
         t = self._tools.get(name)
         if not t:
             return f"ERROR: unknown tool '{name}'"
+        if t.gate not in ("autonomous", "ask_first", "never"):
+            return f"REFUSED: '{name}' has an unrecognized gate '{t.gate}'; refusing to run."
         if t.gate == "never":
             return f"REFUSED: '{name}' is a red-line action this agent never performs."
         if t.gate == "ask_first" and not self.approver(name, args):
