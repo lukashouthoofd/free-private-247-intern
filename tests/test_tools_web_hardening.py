@@ -241,5 +241,31 @@ class TestRobustness(unittest.TestCase):
         self.assertEqual(_candidates("", "Deinze"), [])
 
 
+class TestHasSiteHappyPath(unittest.TestCase):
+    """The tool's core CONTRACT: when a guessed domain is fetched, stays on that domain,
+    is not a directory host, and the page proves ownership, it must return HAS_SITE with
+    the final URL. Every other test only checks the reject/UNCERTAIN branches, so without
+    this a reverted acceptance rule would pass silently."""
+
+    def test_be_domain_owned_returns_has_site(self):
+        def fake_fetch(url):
+            return ("https://dumalin.be/",
+                    "<title>Bakkerij Dumalin Deinze</title>"
+                    "<body>dumalin deinze dumalin</body>")
+        with mock.patch.object(tools_web, "_fetch", side_effect=fake_fetch):
+            out = _verify_website({"name": "Bakkerij Dumalin", "town": "Deinze"})
+        self.assertTrue(out.startswith("HAS_SITE"), out)
+        self.assertIn("https://dumalin.be/", out)
+
+    def test_redirect_off_guessed_domain_is_not_has_site(self):
+        # fetched dumalin.be but final host is a different domain -> must NOT claim HAS_SITE
+        def fake_fetch(url):
+            return ("https://someoneelse.com/",
+                    "<title>Bakkerij Dumalin Deinze</title><body>dumalin deinze</body>")
+        with mock.patch.object(tools_web, "_fetch", side_effect=fake_fetch):
+            out = _verify_website({"name": "Bakkerij Dumalin", "town": "Deinze"})
+        self.assertTrue(out.startswith("UNCERTAIN"), out)
+
+
 if __name__ == "__main__":
     unittest.main()

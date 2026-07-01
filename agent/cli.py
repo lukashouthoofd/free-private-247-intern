@@ -34,8 +34,9 @@ def load_dotenv(path: str = ".env") -> None:
             line = line[7:]
         k, v = line.split("=", 1)
         v = v.strip()
-        if len(v) >= 2 and v[0] in "\"'" and v[-1] == v[0]:
-            v = v[1:-1]                          # quoted value -> keep verbatim
+        if len(v) >= 2 and v[0] in "\"'":
+            end = v.find(v[0], 1)                # closing quote may be followed by ` # comment`
+            v = v[1:end] if end != -1 else v[1:-1]
         else:
             v = v.split(" #", 1)[0].strip()      # drop a trailing inline comment
         os.environ.setdefault(k.strip(), v)
@@ -52,6 +53,9 @@ def load_config(path: str = "config.yaml") -> dict:
         print("note: PyYAML not installed (`pip install pyyaml`) — using built-in defaults.")
         return {"model": {"provider": "gemini", "model": "gemini-2.5-flash"}, "agent": {}}
     except FileNotFoundError:
+        return {"model": {"provider": "gemini", "model": "gemini-2.5-flash"}, "agent": {}}
+    except yaml.YAMLError as e:
+        print(f"note: {p} is not valid YAML ({e}) — using built-in defaults. Fix or re-run `python -m agent setup`.")
         return {"model": {"provider": "gemini", "model": "gemini-2.5-flash"}, "agent": {}}
 
 
@@ -90,7 +94,10 @@ def cmd_chat(cfg: dict) -> None:
             print()
             return
         if msg:
-            print("\n" + agent.run(msg))
+            try:
+                print("\n" + agent.run(msg))
+            except LLMError as e:
+                print(f"\n(model call failed: {e})\nCheck config.yaml / .env — run `python -m agent selftest` to diagnose.")
 
 
 def cmd_selftest(cfg: dict) -> None:

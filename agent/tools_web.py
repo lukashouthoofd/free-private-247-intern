@@ -17,6 +17,7 @@ import re
 import socket
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 
 from .loop import Tool
 
@@ -47,8 +48,10 @@ class _SafeRedirect(urllib.request.HTTPRedirectHandler):
     host (cloud metadata, 10.x, 127.x). urlopen follows redirects silently otherwise."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        m = re.match(r"https?://([^/:]+)", newurl, re.I)
-        if not m or _host_is_internal(m.group(1)):
+        p = urlsplit(newurl)
+        # http(s) only, no userinfo bypass (http://public@169.254.169.254/), host must resolve public
+        if (p.scheme not in ("http", "https") or "@" in p.netloc
+                or _host_is_internal(p.hostname or "")):
             raise urllib.error.URLError("blocked redirect to internal address")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
@@ -93,8 +96,8 @@ def _candidates(name: str, town: str):
 
 def _fetch(url: str):
     try:
-        m = re.match(r"https?://([^/:]+)", url, re.I)
-        if m and _host_is_internal(m.group(1)):
+        p = urlsplit(url)
+        if p.scheme not in ("http", "https") or "@" in p.netloc or _host_is_internal(p.hostname or ""):
             return None, None  # block SSRF to internal hosts (redirects re-checked by _SafeRedirect)
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
         with _SSRF_OPENER.open(req, timeout=9) as r:      # redirects re-validated by _SafeRedirect

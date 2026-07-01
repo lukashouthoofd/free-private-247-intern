@@ -46,20 +46,35 @@ The initial set of shipped capabilities for "Your free, private, 24/7 intern" �
   safety net, prompt injection is mitigated not solved, the never-list, and the two-sided spend cap.
 - **Test suite** — stdlib `unittest` tests covering the agent loop, gates, email, memory, usage,
   and reflection (no network, no credentials).
+- **CI security scan** (`.github/workflows/security.yml`) — Bandit SAST (fails on High severity),
+  `pip-audit` dependency audit, and a full-history `gitleaks` secret scan on every push/PR to
+  `main`, alongside the existing test matrix (`.github/workflows/tests.yml`).
 
 ### Security
 
+- **SSRF guards on outbound fetches** (`agent/tools.py`, `agent/tools_web.py`) — `web_fetch` and
+  `verify_website` refuse loopback/private/link-local/reserved/metadata addresses and userinfo-
+  bypass URLs, and re-validate every HTTP redirect target so a public URL (or a guessed domain)
+  cannot 302 into an internal host.
+- **Fail-closed gates and channel** (`agent/loop.py`, `agent/telegram.py`) — an unrecognized tool
+  gate value now refuses the call instead of running unguarded, and the Telegram gateway refuses
+  to relay any message when `allowed_users` is empty (was previously an open relay).
+- **`read_file` is denylisted, then jailed to the working directory** (`agent/tools.py`) — first
+  refuses `.env` / key / credential / token paths, then (like `write_file`) refuses any path that
+  resolves (via `realpath`, so `..`/symlinks can't escape) outside the agent's working dir —
+  closing a local-file-inclusion path that could otherwise be chained with `web_fetch` to
+  exfiltrate arbitrary files.
 - **`run_shell` ships disabled** (`agent/tools.py`, `agent/cli.py`) — the shell tool is opt-in via
   `tools.run_shell.enabled: true`; by default the agent has no command-execution tool. When
   enabled it runs an **argv list (no `shell=True`)**, so shell metacharacters can't chain a second
   command past the approved one (keeps the child-env secret scrub). Strict opt-in parsing so a
   quoted `'false'` can't silently enable it.
 - **`write_file` is jailed to the working directory** (`agent/tools.py`) — paths that resolve
-  (via `realpath`, so `..`/symlinks can't escape) outside the agent's working dir are refused.
-
-  (The SSRF egress guard, `read_file` secret-denylist, fail-closed gates, and Telegram
-  refuse-to-start-on-empty-allow-list landed in the preceding hardening pass; this change builds
-  on top of them.)
+  (via `realpath`, so `..`/symlinks can't escape) outside the agent's working dir are refused, and
+  secret filenames (`.env` / keys) are refused even inside it.
+- **`verify_website` redirects are re-validated** (`agent/tools_web.py`) — routed through a
+  module-local SSRF opener (not a global `install_opener`, so it never affects `llm.py` /
+  `telegram.py`) whose redirect handler blocks a 3xx hop into an internal host.
 
 ### Changed
 

@@ -120,6 +120,12 @@ def _write_file(args: dict) -> str:
     path, content = args.get("path", ""), args.get("content", "")
     if not path:
         return "ERROR: path is required"
+    _t = os.path.realpath(os.path.abspath(path))
+    _name = os.path.basename(_t).lower()
+    _parts = {p.lower() for p in _t.replace("\\", "/").split("/")}
+    if (_name == ".env" or _name.endswith(_SECRET_SUFFIXES)
+            or any(s in _name for s in _SECRET_SUBSTRINGS) or (_SECRET_DIRS & _parts)):
+        return "ERROR: refusing to write a secrets file (.env / keys are off-limits to the agent)"
     if not _within_workdir(path):
         return (f"ERROR: refused — write_file is jailed to the working directory ({_workdir_root()}); "
                 f"'{path}' is outside it. Write under the working dir (e.g. data/...).")

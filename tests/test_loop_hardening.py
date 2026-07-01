@@ -152,6 +152,20 @@ class TestSpendCapHalt(unittest.TestCase):
         self.assertIn("cap", out)
         m.assert_not_called()  # the model was never called — halted by the dead-man's-switch
 
+    def test_usd_cap_halts_before_any_model_call(self):
+        # Record a call that already cost more than the USD cap, then confirm run() halts
+        # via the *dollar* branch (not just the call-count branch) before any model call.
+        usage_mod.record("openai", "m", {"cost_usd": 0.02})
+        self.assertGreaterEqual(usage_mod.today_spend_usd(), 0.02)
+
+        agent = Agent(configs=[], system="x", tools=[_measure()],
+                      usage_cfg={"agent": {"daily_usd_cap": 0.01}})
+        m = Mock()
+        with patch("agent.loop.complete_with_fallback", m):
+            out = agent.run("hello")
+        self.assertIn("USD cap", out)
+        m.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
