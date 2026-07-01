@@ -1,0 +1,41 @@
+name: security
+
+# Aikido-equivalent scan on every push/PR: SAST (Bandit), dependency audit (pip-audit),
+# and a full-history secret scan (gitleaks). Keeps the runtime honest before it ships public.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # full history so the secret scan sees every commit
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install scanners
+        run: python -m pip install --quiet bandit pip-audit
+
+      - name: Bandit SAST (fail on High severity)
+        run: python -m bandit -r agent --severity-level high --confidence-level medium
+
+      - name: Bandit full report (informational — Medium/Low)
+        if: always()
+        run: python -m bandit -r agent -f txt || true
+
+      - name: Dependency audit
+        run: python -m pip_audit -r requirements.txt
+
+      - name: Secret scan (gitleaks, full history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
