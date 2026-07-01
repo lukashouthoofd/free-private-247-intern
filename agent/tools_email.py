@@ -51,6 +51,16 @@ def _decode(raw) -> str:
         return str(raw)
 
 
+def _safe_decode(payload: bytes, charset) -> str:
+    """Decode bytes with the declared charset; fall back to utf-8 on an unknown
+    charset (a bogus Content-Type must not make a message unreadable). The
+    'replace' errors-arg only covers decode errors, not codec-lookup (LookupError)."""
+    try:
+        return payload.decode(charset or "utf-8", "replace")
+    except LookupError:
+        return payload.decode("utf-8", "replace")
+
+
 def _plain_body(msg: email.message.Message) -> str:
     """Pull the text/plain part out of a parsed message."""
     if msg.is_multipart():
@@ -59,13 +69,12 @@ def _plain_body(msg: email.message.Message) -> str:
                     part.get("Content-Disposition") or "").lower():
                 payload = part.get_payload(decode=True)
                 if payload is not None:
-                    charset = part.get_content_charset() or "utf-8"
-                    return payload.decode(charset, "replace")
+                    return _safe_decode(payload, part.get_content_charset())
         return ""
     payload = msg.get_payload(decode=True)
     if payload is None:
         return ""
-    return payload.decode(msg.get_content_charset() or "utf-8", "replace")
+    return _safe_decode(payload, msg.get_content_charset())
 
 
 def _email_list_recent(args: dict) -> str:
@@ -154,6 +163,9 @@ def _email_send(args: dict) -> str:
         return "ERROR: need a 'to' recipient"
     if "@" not in to:
         return "ERROR: 'to' does not look like an email address"
+    # Reject header injection (CR/LF smuggles extra headers, e.g. Bcc) before building the message.
+    if any(c in to for c in "\r\n") or any(c in subject for c in "\r\n"):
+        return "ERROR: 'to'/'subject' may not contain newline characters"
     msg = EmailMessage()
     msg["From"] = cfg["EMAIL_ADDRESS"]
     msg["To"] = to

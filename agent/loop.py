@@ -76,6 +76,8 @@ class Agent:
                     args = json.loads((c.get("function") or {}).get("arguments") or "{}")
                 except json.JSONDecodeError:
                     args = {}
+                if not isinstance(args, dict):
+                    args = {}
                 result = str(self._exec(name, args))
                 messages.append({"role": "tool", "tool_call_id": c.get("id"), "name": name,
                                  "content": result[:8000] + ("\n...[truncated]" if len(result) > 8000 else "")})

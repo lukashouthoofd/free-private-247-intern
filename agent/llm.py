@@ -137,7 +137,7 @@ def _complete_openai(cfg: LLMConfig, messages: list[dict], tools: list | None) -
 def _complete_anthropic(cfg: LLMConfig, messages: list[dict], tools: list | None) -> dict:
     if not cfg.api_key:
         raise LLMError(f"no API key in ${cfg.api_key_env} for anthropic/{cfg.model}")
-    system = "\n\n".join(m["content"] for m in messages if m.get("role") == "system")
+    system = "\n\n".join(str(m.get("content") or "") for m in messages if m.get("role") == "system").strip()
     # Build a valid Anthropic conversation: keep tool results (as user text — don't drop them),
     # skip empty assistant tool-call turns (Anthropic rejects empty content), and merge
     # consecutive same-role messages so the alternation rule holds.
@@ -181,7 +181,7 @@ def _complete_claude_code(cfg: LLMConfig, messages: list[dict], tools: list | No
     """Shell out to `claude -p`. Tool-calling is handled by Claude Code itself (it has its
     own tools); here we hand it the conversation as a single prompt and take its final text.
     Uses your Claude subscription via the logged-in CLI / CLAUDE_CODE_OAUTH_TOKEN."""
-    prompt = "\n\n".join(f"[{m['role']}] {m.get('content','')}" for m in messages if m.get("content"))
+    prompt = "\n\n".join(f"[{m.get('role','user')}] {m.get('content','')}" for m in messages if m.get("content"))
     cmd = ["claude", "-p", prompt, "--output-format", "json"]
     if cfg.model:
         cmd += ["--model", cfg.model]
@@ -228,6 +228,8 @@ def complete_with_fallback(cfgs: list[LLMConfig], messages: list[dict], tools: l
         try:
             return complete(cfg, messages, tools)
         except LLMError as e:
+            last = e
+        except Exception as e:  # noqa: BLE001 — a bad provider must not skip the remaining fallbacks
             last = e
     raise LLMError(f"all providers failed; last error: {last}")
 

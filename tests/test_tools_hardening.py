@@ -2,6 +2,7 @@
 secret-path denylist, env scrub, and gate pinning. Stdlib-only (unittest), no
 real network: getaddrinfo is monkeypatched so resolution is deterministic."""
 import os
+import shutil
 import tempfile
 import unittest
 import urllib.error
@@ -113,13 +114,25 @@ class TestReadFileDenylist(unittest.TestCase):
                       T._read_file({"path": str(sub / "notes.txt")}))
 
     def test_allows_ordinary_file(self):
-        d = Path(tempfile.mkdtemp())
+        # read_file is jailed to the working dir, so the file must live under it.
+        d = Path(tempfile.mkdtemp(dir=T._workdir_root()))
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         (d / "readme.txt").write_text("hello world")
         self.assertEqual(T._read_file({"path": str(d / "readme.txt")}), "hello world")
 
     def test_missing_file_does_not_crash(self):
-        out = T._read_file({"path": str(Path(tempfile.mkdtemp()) / "nope.txt")})
+        d = Path(tempfile.mkdtemp(dir=T._workdir_root()))
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        out = T._read_file({"path": str(d / "nope.txt")})
         self.assertTrue(out.startswith("ERROR:"))
+
+    def test_refuses_outside_workdir(self):
+        # A non-secret file outside the working dir is still refused (jail, not just denylist).
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        (d / "readme.txt").write_text("hello world")
+        self.assertIn("jailed to the working directory",
+                      T._read_file({"path": str(d / "readme.txt")}))
 
 
 class TestScrubEnv(unittest.TestCase):

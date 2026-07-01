@@ -63,7 +63,9 @@ class TestSSRFGuard(unittest.TestCase):
             cm.read.return_value = b"<title>ok</title>"
             cm.__enter__.return_value = cm
             cm.__exit__.return_value = False
-            with mock.patch.object(tools_web.urllib.request, "urlopen", return_value=cm):
+            # _fetch uses the module-local SSRF opener (not urllib.request.urlopen) so redirects
+            # are re-validated; mock that opener's .open here.
+            with mock.patch.object(tools_web._SSRF_OPENER, "open", return_value=cm):
                 final, html = _fetch("https://ok.example")
                 self.assertEqual(final, "https://ok.example")
                 self.assertIn("ok", html)
@@ -78,6 +80,43 @@ class TestSSRFGuard(unittest.TestCase):
         with self._patch_resolve("127.0.0.1"):
             out = _verify_website({"name": "Bakkerij Dumalin", "town": "Deinze"})
             self.assertTrue(out.startswith("UNCERTAIN"), out)
+
+
+class TestRedirectSSRF(unittest.TestCase):
+    """A public domain must not be able to 302-redirect into an internal host.
+    _fetch's initial-host check alone can't stop that; _SafeRedirect re-validates each hop."""
+
+    def _resolve(self, addr):
+        return mock.patch.object(tools_web.socket, "getaddrinfo",
+                                 return_value=[(2, 0, 0, "", (addr, 0))])
+
+    def test_host_is_internal_true_for_private_and_metadata(self):
+        for addr in ("127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.169.254"):
+            with self._resolve(addr):
+                self.assertTrue(tools_web._host_is_internal("whatever.example"), addr)
+
+    def test_host_is_internal_false_for_public(self):
+        with self._resolve("93.184.216.34"):
+            self.assertFalse(tools_web._host_is_internal("example.com"))
+
+    def test_host_is_internal_fail_closed_on_resolve_error(self):
+        with mock.patch.object(tools_web.socket, "getaddrinfo", side_effect=OSError("nxdomain")):
+            self.assertTrue(tools_web._host_is_internal("nope.example"))   # unresolved -> treat as internal
+
+    def test_safe_redirect_blocks_internal_target(self):
+        with self._resolve("169.254.169.254"):
+            handler = tools_web._SafeRedirect()
+            req = tools_web.urllib.request.Request("https://public.example")
+            with self.assertRaises(tools_web.urllib.error.URLError):
+                handler.redirect_request(req, None, 302, "Found", {},
+                                         "http://metadata.internal/latest/meta-data/")
+
+    def test_safe_redirect_allows_public_target(self):
+        with self._resolve("93.184.216.34"):
+            handler = tools_web._SafeRedirect()
+            req = tools_web.urllib.request.Request("https://public.example")
+            new = handler.redirect_request(req, None, 302, "Found", {}, "https://other-public.example/x")
+            self.assertIsNotNone(new)   # a public->public redirect is permitted
 
 
 class TestParkedBody(unittest.TestCase):
@@ -200,6 +239,32 @@ class TestRobustness(unittest.TestCase):
 
     def test_candidates_empty_name(self):
         self.assertEqual(_candidates("", "Deinze"), [])
+
+
+class TestHasSiteHappyPath(unittest.TestCase):
+    """The tool's core CONTRACT: when a guessed domain is fetched, stays on that domain,
+    is not a directory host, and the page proves ownership, it must return HAS_SITE with
+    the final URL. Every other test only checks the reject/UNCERTAIN branches, so without
+    this a reverted acceptance rule would pass silently."""
+
+    def test_be_domain_owned_returns_has_site(self):
+        def fake_fetch(url):
+            return ("https://dumalin.be/",
+                    "<title>Bakkerij Dumalin Deinze</title>"
+                    "<body>dumalin deinze dumalin</body>")
+        with mock.patch.object(tools_web, "_fetch", side_effect=fake_fetch):
+            out = _verify_website({"name": "Bakkerij Dumalin", "town": "Deinze"})
+        self.assertTrue(out.startswith("HAS_SITE"), out)
+        self.assertIn("https://dumalin.be/", out)
+
+    def test_redirect_off_guessed_domain_is_not_has_site(self):
+        # fetched dumalin.be but final host is a different domain -> must NOT claim HAS_SITE
+        def fake_fetch(url):
+            return ("https://someoneelse.com/",
+                    "<title>Bakkerij Dumalin Deinze</title><body>dumalin deinze</body>")
+        with mock.patch.object(tools_web, "_fetch", side_effect=fake_fetch):
+            out = _verify_website({"name": "Bakkerij Dumalin", "town": "Deinze"})
+        self.assertTrue(out.startswith("UNCERTAIN"), out)
 
 
 if __name__ == "__main__":

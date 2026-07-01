@@ -24,7 +24,11 @@ DEFAULT_MODEL = {
 
 
 def _ask(prompt: str, default: str = "") -> str:
-    v = input(f"{prompt}{f' [{default}]' if default else ''}: ").strip()
+    try:
+        v = input(f"{prompt}{f' [{default}]' if default else ''}: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return default
     return v or default
 
 
@@ -32,7 +36,11 @@ def _choose(prompt: str, options: list[str], default: str) -> str:
     print(prompt)
     for i, o in enumerate(options, 1):
         print(f"  {i}) {o}")
-    raw = input(f"choose 1-{len(options)} [{options.index(default) + 1}]: ").strip()
+    try:
+        raw = input(f"choose 1-{len(options)} [{options.index(default) + 1}]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return default
     try:
         return options[int(raw) - 1]
     except (ValueError, IndexError):
@@ -42,7 +50,28 @@ def _choose(prompt: str, options: list[str], default: str) -> str:
 def _confirm_overwrite(path: Path) -> bool:
     if not path.exists():
         return True
-    return input(f"  {path} exists — overwrite? (y/N) ").strip().lower() in ("y", "yes")
+    try:
+        return input(f"  {path} exists — overwrite? (y/N) ").strip().lower() in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
+def _secret(prompt: str) -> str:
+    """getpass that returns '' on EOF/Ctrl-C (piped/CI stdin) instead of raising — so a
+    non-interactive `python -m agent setup` writes an empty key rather than crashing."""
+    try:
+        return getpass.getpass(prompt).strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return ""
+
+
+def _yaml_dq(s: str) -> str:
+    """Escape a string for safe use inside a YAML double-quoted scalar (backslash, quote, and
+    strip newlines so free-text operator input can never break config.yaml's syntax)."""
+    s = (s or "").replace("\\", "\\\\").replace('"', '\\"')
+    return s.replace("\r", " ").replace("\n", " ")
 
 
 def write_config(root: Path, agent_name: str, operator: str, provider: str, model: str, telegram: bool) -> None:
@@ -50,6 +79,7 @@ def write_config(root: Path, agent_name: str, operator: str, provider: str, mode
     if not _confirm_overwrite(p):
         print("  kept existing config.yaml")
         return
+    agent_name, operator = _yaml_dq(agent_name), _yaml_dq(operator)
     p.write_text(f"""model:
   provider: {provider}
   model: {model}
@@ -144,10 +174,10 @@ def run() -> None:
     key_env = PRESETS.get(provider, {}).get("api_key_env", "")
     key = ""
     if provider not in ("claude-code", "ollama") and key_env:
-        key = getpass.getpass(f"{key_env} (hidden — enter to skip and fill .env later): ").strip()
+        key = _secret(f"{key_env} (hidden — enter to skip and fill .env later): ")
 
     telegram = _ask("\nEnable Telegram channel? (y/N)", "N").lower() in ("y", "yes")
-    tg_token = getpass.getpass("TELEGRAM_BOT_TOKEN (hidden): ").strip() if telegram else ""
+    tg_token = _secret("TELEGRAM_BOT_TOKEN (hidden): ") if telegram else ""
 
     root = Path(".")
     print()
