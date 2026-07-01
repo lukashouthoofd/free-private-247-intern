@@ -165,9 +165,11 @@ def _run_shell(args: dict) -> str:
 
 # Always-on, safe-by-default tools.
 DEFAULT_TOOLS = [
-    Tool("web_fetch", "Fetch a public URL and return its text (truncated). Read-only.",
+    Tool("web_fetch", "Fetch a public URL and return its text (truncated). Read-only; needs "
+                      "operator approval unless tools.web_fetch.autonomous is set — a fetched URL "
+                      "is an egress channel that can carry data (secrets, notes, mail) off the box.",
          {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
-         _web_fetch, "autonomous"),
+         _web_fetch, "ask_first"),
     Tool("read_file", "Read a local file (truncated).",
          {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
          _read_file, "autonomous"),
@@ -199,9 +201,17 @@ def _truthy(v) -> bool:
 
 
 def build_default_tools(cfg: dict | None = None) -> list[Tool]:
-    """The safe default toolset, plus run_shell ONLY if the operator opted in via
-    `tools.run_shell.enabled: true` in config.yaml. Off by default."""
-    tools = list(DEFAULT_TOOLS)
-    if _truthy((((cfg or {}).get("tools") or {}).get("run_shell") or {}).get("enabled", False)):
+    """The safe default toolset. web_fetch is gated ask_first by default (it's an egress channel)
+    and only becomes autonomous with `tools.web_fetch.autonomous: true`; run_shell is added only
+    with `tools.run_shell.enabled: true`. Both opt-in, off by default."""
+    tcfg = (cfg or {}).get("tools") or {}
+    web_autonomous = _truthy((tcfg.get("web_fetch") or {}).get("autonomous", False))
+    tools = []
+    for t in DEFAULT_TOOLS:
+        if t.name == "web_fetch" and web_autonomous:
+            tools.append(Tool(t.name, t.description, t.parameters, t.fn, "autonomous"))
+        else:
+            tools.append(t)
+    if _truthy((tcfg.get("run_shell") or {}).get("enabled", False)):
         tools.append(RUN_SHELL_TOOL)
     return tools

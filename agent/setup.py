@@ -102,6 +102,8 @@ channels:
     allowed_users: []          # numeric chat IDs allowed to talk to it (empty = nobody — fail closed)
 
 tools:
+  web_fetch:
+    autonomous: false          # web_fetch gated ask_first by default (egress channel). true = fetch web without asking.
   run_shell:
     enabled: false             # arbitrary command execution (ask_first). OFF by default — opt in knowingly.
 
