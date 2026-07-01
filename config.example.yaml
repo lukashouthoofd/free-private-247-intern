@@ -37,8 +37,13 @@ channels:
     enabled: false             # token in .env (TELEGRAM_BOT_TOKEN)
     allowed_users: []          # numeric chat IDs allowed to talk to it (empty = nobody — fail closed)
 
-# Optional tools that are OFF by default for safety — enable knowingly.
+# Optional tool powers that are OFF by default for safety — enable knowingly.
 tools:
+  web_fetch:
+    autonomous: false          # web_fetch is an EGRESS channel (a fetched URL can carry your
+                               # files/notes/mail off the box). Gated ask_first by default so a
+                               # prompt-injection can't silently exfiltrate. Set true to let the
+                               # agent fetch the web without asking (research runs hands-free).
   run_shell:
     enabled: false             # arbitrary command execution on the box (ask_first, argv — no shell).
                                # Off by default: it's the largest attack surface. Most work

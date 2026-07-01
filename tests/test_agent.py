@@ -68,9 +68,17 @@ class TestTools(unittest.TestCase):
 
     def test_gates_assigned(self):
         g = {t.name: t.gate for t in DEFAULT_TOOLS}
-        self.assertEqual(g["web_fetch"], "autonomous")
+        self.assertEqual(g["read_file"], "autonomous")
+        self.assertEqual(g["web_fetch"], "ask_first")   # egress channel — gated by default
         self.assertEqual(g["write_file"], "ask_first")
         self.assertNotIn("run_shell", g)          # opt-in only — not in the safe default set
+
+    def test_web_fetch_autonomous_is_opt_in(self):
+        from agent.tools import build_default_tools
+        gate = lambda cfg: {t.name: t.gate for t in build_default_tools(cfg)}["web_fetch"]
+        self.assertEqual(gate({}), "ask_first")                                       # safe default
+        self.assertEqual(gate({"tools": {"web_fetch": {"autonomous": True}}}), "autonomous")
+        self.assertEqual(gate({"tools": {"web_fetch": {"autonomous": "false"}}}), "ask_first")  # strict
 
     def test_run_shell_is_opt_in(self):
         from agent.tools import build_default_tools

