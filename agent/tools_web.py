@@ -15,11 +15,48 @@ from __future__ import annotations
 import ipaddress
 import re
 import socket
+import urllib.error
 import urllib.request
 
 from .loop import Tool
 
 _UA = "self-hosted-ai-employee/0.1"
+
+
+def _host_is_internal(host: str) -> bool:
+    """True if the host resolves to any private/loopback/link-local/reserved/metadata IP.
+    DNS/parse failure -> treated as internal (fail closed)."""
+    if not host:
+        return True
+    try:
+        for *_, (addr, *__) in socket.getaddrinfo(host, None):
+            try:
+                ip = ipaddress.ip_address(addr)
+            except ValueError:
+                continue
+            if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+                    or ip.is_multicast or ip.is_unspecified):
+                return True
+        return False
+    except Exception:
+        return True
+
+
+class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+    """Re-validate every 3xx target so a guessed public domain cannot 302 into an internal
+    host (cloud metadata, 10.x, 127.x). urlopen follows redirects silently otherwise."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        m = re.match(r"https?://([^/:]+)", newurl, re.I)
+        if not m or _host_is_internal(m.group(1)):
+            raise urllib.error.URLError("blocked redirect to internal address")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# A module-local opener (NOT a global install_opener) so redirect validation stays scoped to
+# verify_website and never mutates urllib for the rest of the process (llm.py, telegram.py, ...).
+_SSRF_OPENER = urllib.request.build_opener(_SafeRedirect())
+
 _DIRECTORY = re.compile(r"(^|\.)(facebook|instagram|linkedin|goudengids|goldenpages|tripadvisor|"
                         r"resengo|joyn|deliveroo|ubereats|takeaway|yelp|google\.|maps\.|sitew\.|"
                         r"wixsite|jimdo|one\.com|trustpilot|booking)\.", re.I)
@@ -57,16 +94,10 @@ def _candidates(name: str, town: str):
 def _fetch(url: str):
     try:
         m = re.match(r"https?://([^/:]+)", url, re.I)
-        if m:
-            for *_, (addr, *__) in socket.getaddrinfo(m.group(1), None):
-                try:
-                    ip = ipaddress.ip_address(addr)
-                except ValueError:
-                    continue
-                if ip.is_private or ip.is_loopback or ip.is_link_local:
-                    return None, None  # block SSRF to internal hosts
+        if m and _host_is_internal(m.group(1)):
+            return None, None  # block SSRF to internal hosts (redirects re-checked by _SafeRedirect)
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
-        with urllib.request.urlopen(req, timeout=9) as r:
+        with _SSRF_OPENER.open(req, timeout=9) as r:      # redirects re-validated by _SafeRedirect
             final = r.geturl()
             html = r.read(120_000).decode("utf-8", "replace")
         return final, html

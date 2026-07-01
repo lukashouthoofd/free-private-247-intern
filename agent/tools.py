@@ -106,6 +106,9 @@ def _read_file(args: dict) -> str:
     if (name == ".env" or name.endswith(_SECRET_SUFFIXES)
             or any(s in name for s in _SECRET_SUBSTRINGS) or (_SECRET_DIRS & parts)):
         return "ERROR: refusing to read a secrets file (.env / keys are off-limits to the agent)"
+    if not _within_workdir(path):
+        return (f"ERROR: refused — read_file is jailed to the working directory ({_workdir_root()}); "
+                f"'{raw}' is outside it. Read under the working dir (e.g. data/...).")
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             return f.read(8000)
