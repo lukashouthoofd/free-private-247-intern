@@ -69,7 +69,11 @@ channels:
   cli: true
   telegram:
     enabled: {str(telegram).lower()}
-    allowed_users: []
+    allowed_users: []          # numeric chat IDs allowed to talk to it (empty = nobody — fail closed)
+
+tools:
+  run_shell:
+    enabled: false             # arbitrary command execution (ask_first). OFF by default — opt in knowingly.
 
 gates:
   autonomous: [read, research, measure, draft]

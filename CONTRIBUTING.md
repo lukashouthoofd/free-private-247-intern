@@ -72,8 +72,11 @@ built-ins and `agent/loop.py` for the dataclass definition.
   writes/runs commands, `"never"` for a red-line action.
 
 Append your tool to the relevant list (`DEFAULT_TOOLS` in `agent/tools.py`, or a domain pack such
-as `WEB_TOOLS` / `EMAIL_TOOLS` / `MEMORY_TOOLS` / `USAGE_TOOLS`), then wire it into `TOOLS` in
-`agent/cli.py`. Add a stdlib `unittest` test for it under `tests/` (no network, no creds).
+as `WEB_TOOLS` / `EMAIL_TOOLS` / `MEMORY_TOOLS` / `USAGE_TOOLS`) — `agent/cli.py`'s `build_tools(cfg)`
+assembles them all at runtime, so a tool in one of those lists is wired in automatically. (A
+powerful/optional tool can be made opt-in like `run_shell`: keep it out of `DEFAULT_TOOLS` and add
+it in `build_default_tools` only when config enables it.) Add a stdlib `unittest` test for it under
+`tests/` (no network, no creds).
 
 ## Opening a PR
 

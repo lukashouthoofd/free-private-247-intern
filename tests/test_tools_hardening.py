@@ -160,10 +160,17 @@ class TestGatesUnchanged(unittest.TestCase):
         self.assertEqual(g["read_file"], "autonomous")
         self.assertEqual(g["web_fetch"], "autonomous")
 
-    def test_write_and_shell_still_ask_first(self):
+    def test_write_stays_ask_first(self):
         g = {t.name: t.gate for t in DEFAULT_TOOLS}
         self.assertEqual(g["write_file"], "ask_first")
-        self.assertEqual(g["run_shell"], "ask_first")
+
+    def test_run_shell_is_opt_in(self):
+        # run_shell is no longer a default tool — it must be explicitly enabled in config,
+        # and it stays ask_first when it is. (See build_default_tools.)
+        from agent.tools import build_default_tools
+        self.assertNotIn("run_shell", {t.name for t in DEFAULT_TOOLS})
+        on = build_default_tools({"tools": {"run_shell": {"enabled": True}}})
+        self.assertEqual({t.name: t.gate for t in on}.get("run_shell"), "ask_first")
 
 
 if __name__ == "__main__":

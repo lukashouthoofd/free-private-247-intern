@@ -80,10 +80,13 @@ through the chat channel, give it orders.
 
 Read [`SECURITY.md`](SECURITY.md) before putting this on an always-on box. The short version:
 
-- **`run_shell` is powerful.** The gate (`ask_first`) is not the real safety net — the OS is.
-  Run the agent as a **non-sudo user** and keep the systemd hardening in
-  [`docs/SETUP.md`](docs/SETUP.md). Do not loosen the gates. For an untrusted or public-facing
-  box, consider dropping `run_shell` entirely.
+- **`run_shell` ships OFF.** The shell tool is opt-in (`tools.run_shell.enabled: true`); by
+  default the agent has no way to run commands. When enabled it is `ask_first` and runs an argv
+  list (no shell, so `; rm -rf /` can't chain). `write_file` is jailed to the working dir. The
+  real safety net is still the OS — run the agent as a **non-sudo user** and keep the systemd
+  hardening in [`docs/SETUP.md`](docs/SETUP.md). Do not loosen the gates.
+- **The chat channel is fail-closed.** An empty Telegram `allowed_users` rejects *everyone*; only
+  allow-listed users can talk to the bot or approve an `ask_first` action.
 - **Prompt injection is mitigated, not solved.** Web/email content is treated as data, not
   instructions — but that is a mitigation, not a guarantee. The autonomous / ask-first / never
   gates are what actually cap the blast radius if the model is ever steered.
