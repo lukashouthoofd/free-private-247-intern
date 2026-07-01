@@ -168,10 +168,10 @@ class TestScrubEnv(unittest.TestCase):
 
 
 class TestGatesUnchanged(unittest.TestCase):
-    def test_read_and_fetch_stay_autonomous(self):
+    def test_read_autonomous_web_fetch_gated_by_default(self):
         g = {t.name: t.gate for t in DEFAULT_TOOLS}
         self.assertEqual(g["read_file"], "autonomous")
-        self.assertEqual(g["web_fetch"], "autonomous")
+        self.assertEqual(g["web_fetch"], "ask_first")   # egress channel — approval unless opted in
 
     def test_write_stays_ask_first(self):
         g = {t.name: t.gate for t in DEFAULT_TOOLS}

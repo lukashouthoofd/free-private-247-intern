@@ -102,8 +102,10 @@ def _recall(args: dict) -> str:
         n = int(args.get("n", 20))
     except (TypeError, ValueError):
         n = 20
+    if n <= 0:                       # a bad/zero limit -> the default, consistently on both paths
+        n = 20
     hits = search(query) if query else recent(n)
-    if query and n > 0:
+    if query:
         hits = hits[-n:]
     if not hits:
         return "(no matching notes)" if query else "(memory is empty)"
